@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyeasydeploy"
+version = "0.1.0"
+authors = [
+    {name = "Beltrán Offerrall"}
+]
+description = "Simple and replicable Python server deployment toolkit"
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["deployment", "devops", "automation", "ssh", "fabric", "supervisor"]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: System :: Installation/Setup",
+]
+dependencies = [
+    "fabric>=3.0.0",
+    "paramiko>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/offerrall/pyeasydeploy"
+Repository = "https://github.com/offerrall/pyeasydeploy"
+Issues = "https://github.com/offerrall/pyeasydeploy/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pyeasydeploy*"]
