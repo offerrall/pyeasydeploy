@@ -6,6 +6,7 @@ Simple and replicable Python server deployment toolkit. Deploy your Python appli
 
 ## Features
 
+- **Minimalistc library** - Only 250 lines of code, easy to understand and extend
 - **Simple API** - Deploy servers with minimal configuration
 - **Python Version Management** - Automatically detect and use specific Python versions
 - **Multiple Package Sources** - Install from PyPI, local directories, or GitHub
