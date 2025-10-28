@@ -27,7 +27,7 @@ from pyeasydeploy import *
 connection = connect_to_host(
     host="192.168.1.100",
     user="deploy",
-    key_filename="~/.ssh/id_rsa"  # or password="..." for testing
+    password="temp123"
 )
 
 # Setup environment
