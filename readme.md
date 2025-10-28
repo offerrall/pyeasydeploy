@@ -60,6 +60,26 @@ deploy_supervisor_service(connection, service)
 supervisor_start(connection, "my_app")
 ```
 
+### Combining with Pure Fabric
+
+Since pyeasydeploy is built on top of Fabric, you can freely mix both:
+```python
+from pyeasydeploy import *
+
+# Use pyeasydeploy for common deployment tasks
+connection = connect_to_host(host="...", user="...", password="...")
+venv_python = create_venv(connection, python_instance, "/home/user/venv")
+install_packages(connection, venv_python, ["fastapi"])
+
+# Use pure Fabric for custom commands
+connection.run("df -h")  # Check disk space
+connection.sudo("systemctl status nginx")  # Check nginx status
+connection.run("tail -f /var/log/myapp.log")  # View logs
+
+# Back to pyeasydeploy
+supervisor_restart(connection, "myapp")
+```
+
 ## Core Components
 
 ### Connection Management
