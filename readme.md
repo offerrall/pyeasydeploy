@@ -1,19 +1,16 @@
 # pyeasydeploy
 
-Simple and replicable Python server deployment toolkit. Deploy your Python applications to remote servers with just a few lines of code.
+Simple Python server deployment toolkit. Deploy to remote servers with just a few lines of code.
 
-> ⚠️ **Warning**: This library is in very early stages and currently in testing phase. Use at your own risk in production environments. APIs may change without notice.
+> ⚠️ **Warning**: Early stage library in testing phase. Use at your own risk. APIs may change.
 
-## Features
+## Why?
 
-- **Minimalistc library** - Only 250 lines of code, easy to understand and extend
-- **Simple API** - Deploy servers with minimal configuration
-- **Python Version Management** - Automatically detect and use specific Python versions
-- **Multiple Package Sources** - Install from PyPI, local directories, or GitHub
-- **Virtual Environment Management** - Automatic venv creation and activation
-- **Supervisor Integration** - Service management with supervisord
-- **SSH-based** - Secure remote deployment via SSH/Fabric
-- **Cross-platform** - Works on Windows, Linux, and macOS
+Tired of SSHing manually but Kubernetes is overkill for your $5 VPS? This is for you.
+
+- **250 lines of code** - Read and understand it in minutes
+- **Simple API** - If you can write Python, you can deploy
+- **Built on Fabric** - Mix with pure Fabric commands anytime
 
 ## Installation
 
@@ -26,33 +23,29 @@ pip install git+https://github.com/offerrall/pyeasydeploy.git
 ```python
 from pyeasydeploy import *
 
-# Connect to remote server
+# Connect (password or SSH key)
 connection = connect_to_host(
-    host="192.168.1.130",
-    user="myuser",
-    password="mypassword",
-    port=22  # optional, defaults to 22
+    host="192.168.1.100",
+    user="deploy",
+    key_filename="~/.ssh/id_rsa"  # or password="..." for testing
 )
 
-# Setup Python environment
-python_instance = get_target_python_instance(connection, "3.14")
-venv_python = create_venv(connection, python_instance, "/home/myuser/venv")
+# Setup environment
+python = get_target_python_instance(connection, "3.11")
+venv = create_venv(connection, python, "/home/deploy/venv")
+install_packages(connection, venv, ["fastapi", "uvicorn[standard]"])
 
-# Install dependencies
-install_packages(connection, venv_python, ["fastapi", "uvicorn[standard]"])
+# Deploy app
+upload_directory(connection, "./my_app", "/home/deploy/my_app")
 
-# Upload application code
-upload_directory(connection, "./my_app", "/home/myuser/my_app")
-
-# Configure supervisor service
+# Run with supervisor
 service = SupervisorService(
     name="my_app",
-    command=f"{venv_python.venv_path}/bin/uvicorn main:app --host 0.0.0.0 --port 8000",
-    directory="/home/myuser/my_app",
-    user="myuser"
+    command=f"{venv.venv_path}/bin/uvicorn main:app --host 0.0.0.0 --port 8000",
+    directory="/home/deploy/my_app",
+    user="deploy"
 )
 
-# Deploy and start
 if not check_supervisor_installed(connection):
     install_supervisor(connection)
 
@@ -60,163 +53,161 @@ deploy_supervisor_service(connection, service)
 supervisor_start(connection, "my_app")
 ```
 
-### Combining with Pure Fabric
+## Examples
 
-Since pyeasydeploy is built on top of Fabric, you can freely mix both:
+### Deploy FastAPI app
+
 ```python
 from pyeasydeploy import *
 
-# Use pyeasydeploy for common deployment tasks
-connection = connect_to_host(host="...", user="...", password="...")
-venv_python = create_venv(connection, python_instance, "/home/user/venv")
-install_packages(connection, venv_python, ["fastapi"])
+conn = connect_to_host(host="vps.example.com", user="deploy", key_filename="~/.ssh/deploy_key")
+python = get_target_python_instance(conn, "3.11")
+venv = create_venv(conn, python, "/home/deploy/myapp_venv")
 
-# Use pure Fabric for custom commands
-connection.run("df -h")  # Check disk space
-connection.sudo("systemctl status nginx")  # Check nginx status
-connection.run("tail -f /var/log/myapp.log")  # View logs
+install_packages(conn, venv, ["fastapi", "uvicorn[standard]", "sqlalchemy"])
+upload_directory(conn, "./myapp", "/home/deploy/myapp")
 
-# Back to pyeasydeploy
-supervisor_restart(connection, "myapp")
-```
-
-## Core Components
-
-### Connection Management
-
-```python
-# Create connection to remote host
-connection = connect_to_host(
-    host="192.168.1.130",
-    user="myuser",
-    password="mypassword",
-    port=22  # optional, defaults to 22
+service = SupervisorService(
+    name="myapp",
+    command=f"{venv.venv_path}/bin/uvicorn main:app --host 0.0.0.0 --port 8000",
+    directory="/home/deploy/myapp",
+    user="deploy"
 )
+
+if not check_supervisor_installed(conn):
+    install_supervisor(conn)
+
+deploy_supervisor_service(conn, service)
+supervisor_start(conn, "myapp")
+
+print("✅ Deployed! Visit http://vps.example.com:8000")
 ```
 
-### Python Version Management
+### Install from GitHub + local package
 
 ```python
-# Get available Python versions
-instances = get_python_instances(connection)
+from pyeasydeploy import *
 
-# Get specific Python version
-python_instance = get_target_python_instance(connection, "3.14")
-```
+conn = connect_to_host(host="192.168.1.100", user="deploy", password="temp123")
+python = get_target_python_instance(conn, "3.11")
+venv = create_venv(conn, python, "/home/deploy/venv")
 
-### Virtual Environment
-
-```python
-# Create virtual environment
-venv_python = create_venv(connection, python_instance, "/home/myuser/venv")
-
-# Run commands in venv
-run_in_venv(connection, venv_python, "pip list")
-```
-
-### Package Installation
-
-```python
 # Install from PyPI
-install_packages(connection, venv_python, ["fastapi==0.120.1", "uvicorn[standard]"])
-
-# Install local package
-install_local_package(connection, venv_python, "./my_package")
+install_packages(conn, venv, ["requests", "pandas"])
 
 # Install from GitHub
-install_package_from_github(connection, venv_python, "https://github.com/user/repo")
+install_package_from_github(conn, venv, "https://github.com/user/cool-package")
+
+# Install your local package
+install_local_package(conn, venv, "./my_local_package")
+```
+
+### Mix with pure Fabric commands
+
+```python
+from pyeasydeploy import *
+
+conn = connect_to_host(host="server.com", user="deploy", key_filename="~/.ssh/id_rsa")
+
+# Use pyeasydeploy
+python = get_target_python_instance(conn, "3.11")
+venv = create_venv(conn, python, "/home/deploy/venv")
+install_packages(conn, venv, ["flask"])
+
+# Use pure Fabric
+conn.run("df -h")  # Check disk
+conn.sudo("systemctl restart nginx")  # Restart nginx
+conn.run("tail -100 /var/log/myapp.log")  # Check logs
+
+# Back to pyeasydeploy
+supervisor_restart(conn, "myapp")
+```
+
+### Update existing deployment
+
+```python
+from pyeasydeploy import *
+
+conn = connect_to_host(host="vps.example.com", user="deploy", key_filename="~/.ssh/deploy_key")
+
+# Upload new code
+upload_directory(conn, "./myapp", "/home/deploy/myapp")
+
+# Restart service
+supervisor_restart(conn, "myapp")
+supervisor_status(conn, "myapp")
+```
+
+### Run custom commands in venv
+
+```python
+from pyeasydeploy import *
+
+conn = connect_to_host(host="server.com", user="deploy", password="pass")
+python = get_target_python_instance(conn, "3.11")
+venv = create_venv(conn, python, "/home/deploy/venv")
+
+# Run migrations
+run_in_venv(conn, venv, "alembic upgrade head")
+
+# Run custom script
+run_in_venv(conn, venv, "python scripts/seed_db.py")
+```
+
+## API Reference
+
+### Connection
+
+```python
+# With SSH key (recommended)
+connect_to_host(host, user, key_filename="/path/to/key", port=22)
+
+# With password (testing only)
+connect_to_host(host, user, password="...", port=22)
+```
+
+### Python & Venv
+
+```python
+get_python_instances(conn)  # List all Python versions
+get_target_python_instance(conn, "3.11")  # Get specific version
+create_venv(conn, python_instance, "/path/to/venv")
+run_in_venv(conn, venv, "command")
+```
+
+### Packages
+
+```python
+install_packages(conn, venv, ["pkg1", "pkg2==1.0.0"])
+install_local_package(conn, venv, "./local_package")
+install_package_from_github(conn, venv, "https://github.com/user/repo")
 ```
 
 ### File Transfer
 
 ```python
-# Upload single file
-upload_file(connection, "./config.json", "/home/myuser/app/config.json")
-
-# Upload entire directory
-upload_directory(connection, "./my_app", "/home/myuser/my_app")
+upload_file(conn, "./local/file.py", "/remote/path/file.py")
+upload_directory(conn, "./local_dir", "/remote/dir")
 ```
 
-### Supervisor Service Management
+### Supervisor
 
 ```python
-# Install supervisor
-install_supervisor(connection)
+install_supervisor(conn)
+check_supervisor_installed(conn)
 
-# Check if supervisor is installed
-if check_supervisor_installed(connection):
-    print("Supervisor is ready")
-
-# Create service configuration
 service = SupervisorService(
-    name="my_service",
+    name="myapp",
     command="/path/to/command",
-    directory="/working/directory",
-    user="myuser",
-    autostart=True,
-    autorestart=True
+    directory="/working/dir",
+    user="username"
 )
 
-# Deploy service
-deploy_supervisor_service(connection, service)
-
-# Manage service
-supervisor_start(connection, "my_service")
-supervisor_stop(connection, "my_service")
-supervisor_restart(connection, "my_service")
-supervisor_status(connection, "my_service")
-```
-
-## Complete Example: FastAPI Deployment
-
-```python
-from pyeasydeploy import *
-
-# Configuration
-HOST = "192.168.1.130"
-USER = "myuser"
-PASSWORD = "mypassword"
-PYTHON_VERSION = "3.14"
-APP_NAME = "fastapi_app"
-LOCAL_APP = "./my_fastapi_app"
-REMOTE_APP = f"/home/{USER}/{APP_NAME}"
-
-# Connect
-connection = connect_to_host(host=HOST, user=USER, password=PASSWORD)
-
-# Setup Python environment
-python_instance = get_target_python_instance(connection, PYTHON_VERSION)
-venv_python = create_venv(connection, python_instance, f"/home/{USER}/venv")
-
-# Install dependencies
-install_packages(connection, venv_python, [
-    "fastapi==0.120.1",
-    "uvicorn[standard]",
-    "pydantic",
-    "python-dotenv"
-])
-
-# Upload application
-upload_directory(connection, LOCAL_APP, REMOTE_APP)
-
-# Setup supervisor
-if not check_supervisor_installed(connection):
-    install_supervisor(connection)
-
-service = SupervisorService(
-    name=APP_NAME,
-    command=f"{venv_python.venv_path}/bin/uvicorn main:app --host 0.0.0.0 --port 8000",
-    directory=REMOTE_APP,
-    user=USER
-)
-
-deploy_supervisor_service(connection, service)
-supervisor_start(connection, APP_NAME)
-
-# Verify deployment
-print("\n✅ Deployment successful!")
-print(f"🌐 Access at: http://{HOST}:8000")
-supervisor_status(connection, APP_NAME)
+deploy_supervisor_service(conn, service)
+supervisor_start(conn, "myapp")
+supervisor_stop(conn, "myapp")
+supervisor_restart(conn, "myapp")
+supervisor_status(conn, "myapp")
 ```
 
 ## Requirements
@@ -227,8 +218,8 @@ supervisor_status(connection, APP_NAME)
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+PRs welcome! This is a small tool I built for myself. If there's interest, I'll publish to PyPI and add more features.
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT
