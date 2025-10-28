@@ -1,21 +1,15 @@
 from typing import NamedTuple
 from fabric import Connection
 
-class RemoteHost(NamedTuple):
-    host: str
-    user: str
-    password: str
-    port: int = 22
-    
-    def connect(self) -> Connection:
-        conn = Connection(
-            host=self.host,
-            user=self.user,
-            port=self.port,
-            connect_kwargs={"password": self.password}
-        )
-        conn.config.sudo.password = self.password
-        return conn
+def connect_to_host(host: str, user: str, password: str, port: int = 22) -> Connection:
+    conn = Connection(
+        host=host,
+        user=user,
+        port=port,
+        connect_kwargs={"password": password}
+    )
+    conn.config.sudo.password = password
+    return conn
 
 class PythonInstance(NamedTuple):
     version: str

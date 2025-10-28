@@ -26,11 +26,12 @@ pip install git+https://github.com/offerrall/pyeasydeploy.git
 from pyeasydeploy import *
 
 # Connect to remote server
-connection = RemoteHost(
+connection = connect_to_host(
     host="192.168.1.130",
     user="myuser",
-    password="mypassword"
-).connect()
+    password="mypassword",
+    port=22  # optional, defaults to 22
+)
 
 # Setup Python environment
 python_instance = get_target_python_instance(connection, "3.14")
@@ -64,13 +65,12 @@ supervisor_start(connection, "my_app")
 
 ```python
 # Create connection to remote host
-remote_host = RemoteHost(
+connection = connect_to_host(
     host="192.168.1.130",
     user="myuser",
     password="mypassword",
     port=22  # optional, defaults to 22
 )
-connection = remote_host.connect()
 ```
 
 ### Python Version Management
@@ -161,7 +161,7 @@ LOCAL_APP = "./my_fastapi_app"
 REMOTE_APP = f"/home/{USER}/{APP_NAME}"
 
 # Connect
-connection = RemoteHost(host=HOST, user=USER, password=PASSWORD).connect()
+connection = connect_to_host(host=HOST, user=USER, password=PASSWORD)
 
 # Setup Python environment
 python_instance = get_target_python_instance(connection, PYTHON_VERSION)
