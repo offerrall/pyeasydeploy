@@ -2,8 +2,6 @@
 
 Simple Python server deployment toolkit. Deploy to remote servers with just a few lines of code.
 
-> ⚠️ **Warning**: Early stage library in testing phase. Use at your own risk. APIs may change.
-
 ## Why?
 
 Tired of SSHing manually but Kubernetes is overkill for your $5 VPS? This is for you.
