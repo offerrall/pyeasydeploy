@@ -16,7 +16,7 @@ class SupervisorService(NamedTuple):
 
 def install_supervisor(conn: Connection, verbose: bool = True):
     if verbose: print("Installing supervisor...")
-    result = conn.sudo("apt-get update", hide=not verbose, warn=True)
+    conn.sudo("apt-get update", hide=not verbose, warn=True)
     conn.sudo("apt-get install -y supervisor", hide=not verbose)
     conn.sudo("systemctl enable supervisor", hide=True)
     conn.sudo("systemctl start supervisor", hide=True)
@@ -67,17 +67,17 @@ def deploy_supervisor_service(conn: Connection, service: SupervisorService, verb
 
 def supervisor_start(conn: Connection, service_name: str, verbose: bool = True):
     if verbose: print(f"Starting: {service_name}")
-    conn.run(f"sudo supervisorctl start {service_name}")
+    conn.sudo(f"supervisorctl start {service_name}")
 
 def supervisor_stop(conn: Connection, service_name: str, verbose: bool = True):
     if verbose: print(f"Stopping: {service_name}")
-    conn.run(f"sudo supervisorctl stop {service_name}")
+    conn.sudo(f"supervisorctl stop {service_name}")
 
 def supervisor_restart(conn: Connection, service_name: str, verbose: bool = True):
     if verbose: print(f"Restarting: {service_name}")
-    conn.run(f"sudo supervisorctl restart {service_name}")
+    conn.sudo(f"supervisorctl restart {service_name}")
 
 def supervisor_status(conn: Connection, service_name: str = None):
     if service_name:
-        return conn.run(f"sudo supervisorctl status {service_name}")
-    return conn.run("sudo supervisorctl status")
+        return conn.sudo(f"supervisorctl status {service_name}")
+    return conn.sudo("supervisorctl status")
