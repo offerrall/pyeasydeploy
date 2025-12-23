@@ -25,3 +25,18 @@ def get_target_python_instance(connection: Connection, target_version: str, verb
             if verbose: print(f"Selected Python {instance.version} at {instance.executable}")
             return instance
     raise RuntimeError(f"No Python instance found for version {target_version}")
+
+def get_any_python_instance(conn: Connection, verbose: bool = True) -> PythonInstance:
+    cmd = "ls /usr/bin/python3.* | head -n 1"
+    result = conn.run(cmd, hide=True)
+    
+    line = result.stdout.strip()
+    if not line:
+        raise RuntimeError("No Python instances found on the remote host.")
+
+    version = line.split("/")[-1].replace("python", "")
+    
+    if verbose: 
+        print(f"Quickly selected Python {version} at {line}")
+
+    return PythonInstance(version=version, executable=line)
