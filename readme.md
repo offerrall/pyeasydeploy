@@ -16,69 +16,51 @@ Tired of SSHing manually but Kubernetes is overkill for your $5 VPS? This is for
 pip install git+https://github.com/offerrall/pyeasydeploy.git
 ```
 
-## Quick Start
+## Examples
+
+### Deploy func-to-web app (FastAPI + Uvicorn) to VPS
 
 ```python
 from pyeasydeploy import *
+from getpass import getpass
 
-# Connect (password or SSH key)
+IP = "192.168.0.100"
+USER = "offeytb"
+PASSWORD = getpass("Enter the password for the remote user: ")
+NAME_PROGRAM = "FastFileTransfer"
+PROGRAM_FOLDER = f"./{NAME_PROGRAM}"
+PYTHON_VERSION = "3.12"
+
 connection = connect_to_host(
-    host="192.168.1.100",
-    user="deploy",
-    password="temp123"
+    host=IP,
+    user=USER,
+    password=PASSWORD
 )
 
-# Setup environment
-python = get_target_python_instance(connection, "3.11")
-venv = create_venv(connection, python, "/home/deploy/venv")
-install_packages(connection, venv, ["fastapi", "uvicorn[standard]"])
+app_folder_dest = f"/home/{USER}/{NAME_PROGRAM}"
+venv_path = f"{app_folder_dest}/.venv"
 
-# Deploy app
-upload_directory(connection, "./my_app", "/home/deploy/my_app")
+connection.run(f"mkdir -p {app_folder_dest}")
 
-# Run with supervisor
+python = get_target_python_instance(connection, PYTHON_VERSION)
+venv = create_venv(connection, python, venv_path)
+
+install_packages(connection, venv, ["func-to-web"])
+
+upload_directory(connection, PROGRAM_FOLDER, app_folder_dest)
+
 service = SupervisorService(
-    name="my_app",
-    command=f"{venv.venv_path}/bin/uvicorn main:app --host 0.0.0.0 --port 8000",
-    directory="/home/deploy/my_app",
-    user="deploy"
+    name=NAME_PROGRAM,
+    command=f"{venv.venv_path}/bin/python main.py",
+    directory=app_folder_dest,
+    user=USER
 )
 
 if not check_supervisor_installed(connection):
     install_supervisor(connection)
 
 deploy_supervisor_service(connection, service)
-supervisor_start(connection, "my_app")
-```
-
-## Examples
-
-### Deploy FastAPI app
-
-```python
-from pyeasydeploy import *
-
-conn = connect_to_host(host="vps.example.com", user="deploy", key_filename="~/.ssh/deploy_key")
-python = get_target_python_instance(conn, "3.11")
-venv = create_venv(conn, python, "/home/deploy/myapp_venv")
-
-install_packages(conn, venv, ["fastapi", "uvicorn[standard]", "sqlalchemy"])
-upload_directory(conn, "./myapp", "/home/deploy/myapp")
-
-service = SupervisorService(
-    name="myapp",
-    command=f"{venv.venv_path}/bin/uvicorn main:app --host 0.0.0.0 --port 8000",
-    directory="/home/deploy/myapp",
-    user="deploy"
-)
-
-if not check_supervisor_installed(conn):
-    install_supervisor(conn)
-
-deploy_supervisor_service(conn, service)
-supervisor_start(conn, "myapp")
-
-print("✅ Deployed! Visit http://vps.example.com:8000")
+supervisor_restart(connection, NAME_PROGRAM)
 ```
 
 ### Install from GitHub + local package
