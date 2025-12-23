@@ -169,6 +169,7 @@ connect_to_host(host, user, password="...", port=22)
 ```python
 get_python_instances(conn)  # List all Python versions
 get_target_python_instance(conn, "3.11")  # Get specific version
+get_any_python_instance(conn)  # Get any available Python version (first found)
 create_venv(conn, python_instance, "/path/to/venv")
 run_in_venv(conn, venv, "command")
 ```
