@@ -1,5 +1,5 @@
 from fabric import Connection
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 from pathlib import Path
 
 from .transfer import upload_file
@@ -13,6 +13,7 @@ class SupervisorService(NamedTuple):
     autorestart: bool = True
     stdout_logfile: str = "/var/log/supervisor/%(program_name)s.log"
     stderr_logfile: str = "/var/log/supervisor/%(program_name)s_err.log"
+    environment: Optional[str] = None
 
 def install_supervisor(conn: Connection, verbose: bool = True):
     if verbose: print("Installing supervisor...")
@@ -39,6 +40,10 @@ autorestart={autorestart}
 stdout_logfile={service.stdout_logfile}
 stderr_logfile={service.stderr_logfile}
 """
+    
+    if service.environment:
+        config += f"environment={service.environment}\n"
+    
     return config
 
 def deploy_supervisor_service(conn: Connection, service: SupervisorService, verbose: bool = True):
