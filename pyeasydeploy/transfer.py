@@ -2,10 +2,13 @@ from pathlib import PurePosixPath, Path
 from fabric import Connection
 import os
 
-def upload_file(conn: Connection, local_file: str, remote_file: str, verbose: bool = True):
+def upload_file(conn: Connection, local_file: str, remote_file: str, verbose: bool = True, remove_if_exists: bool = True):
     local_path = Path(local_file)
     if not local_path.exists():
         raise FileNotFoundError(f"Local file not found: {local_file}")
+
+    if remove_if_exists:
+        conn.run(f"rm -f {remote_file}", hide=True, warn=True)
     
     remote_dir = str(PurePosixPath(remote_file).parent)
     conn.run(f"mkdir -p {remote_dir}", hide=True)
@@ -14,10 +17,13 @@ def upload_file(conn: Connection, local_file: str, remote_file: str, verbose: bo
     conn.put(str(local_path), remote_file)
     if verbose: print(f"Upload complete")
 
-def upload_directory(conn: Connection, local_dir: str, remote_dir: str, verbose: bool = True):
+def upload_directory(conn: Connection, local_dir: str, remote_dir: str, verbose: bool = True, remove_if_exists: bool = True):
     local_path = Path(local_dir)
     if not local_path.exists():
         raise FileNotFoundError(f"Local directory not found: {local_dir}")
+
+    if remove_if_exists:
+        conn.run(f"rm -rf {remote_dir}", hide=True, warn=True)
     
     conn.run(f"mkdir -p {remote_dir}", hide=True)
     

@@ -6,7 +6,7 @@ Simple Python server deployment toolkit. Deploy to remote servers with just a fe
 
 Tired of SSHing manually but Kubernetes is overkill for your $5 VPS? This is for you.
 
-- **250 lines of code** - Read and understand it in minutes
+- **300 lines of code** - Read and understand it in minutes
 - **Simple API** - If you can write Python, you can deploy
 - **Built on Fabric** - Mix with pure Fabric commands anytime
 
