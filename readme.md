@@ -39,8 +39,6 @@ connection = connect_to_host(
 app_folder_dest = f"/home/{USER}/{NAME_PROGRAM}"
 venv_path = f"{app_folder_dest}/.venv"
 
-connection.run(f"mkdir -p {app_folder_dest}")
-
 upload_directory(connection, PROGRAM_FOLDER, app_folder_dest)
 
 python = get_any_python_instance(connection)
@@ -94,7 +92,7 @@ from pyeasydeploy import *
 conn = connect_to_host(host="vps.example.com", user="deploy", key_filename="~/.ssh/deploy_key")
 
 # Upload new code
-upload_directory(conn, "./myapp", "/home/deploy/myapp")
+upload_directory(conn, "./myapp", "/home/deploy/myapp", remove_if_exists=True) # overwrite existing / False to copy only new files
 
 # Restart service
 supervisor_restart(conn, "myapp")
