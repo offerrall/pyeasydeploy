@@ -32,7 +32,8 @@ the connection and the data it needs, and returns the data the next step needs.
 
 ## Installation
 
-PIPY is coming soon. For now, install directly from GitHub:
+PyPI is coming soon. For now, install directly from GitHub:
+
 ```bash
 pip install git+https://github.com/offerrall/pyeasydeploy.git
 ```
@@ -191,6 +192,25 @@ install_package_from_private_github(conn, venv, "git@github.com:user/repo.git", 
 ```python
 upload_file(conn, "./local/file.py", "/remote/path/file.py", remove_if_exists=True)
 upload_directory(conn, "./local_dir", "/remote/dir", remove_if_exists=True)
+```
+
+`upload_directory` automatically skips common junk that shouldn't be deployed:
+`.git`, `.venv`, `__pycache__`, IDE folders, `*.pyc`, local SQLite files, etc.
+This keeps deploys fast and avoids shipping development artifacts to the server.
+
+You can override the filter with the `ignore` parameter (accepts globs via
+`fnmatch`):
+
+```python
+# Use your own list (replaces the defaults)
+upload_directory(conn, "./myapp", "/home/deploy/myapp", ignore=[".git", "*.log"])
+
+# Disable filtering entirely (upload everything)
+upload_directory(conn, "./myapp", "/home/deploy/myapp", ignore=[])
+
+# Extend the defaults
+from pyeasydeploy import DEFAULT_IGNORE
+upload_directory(conn, "./myapp", "/home/deploy/myapp", ignore=DEFAULT_IGNORE + ["secrets.env"])
 ```
 
 ### Supervisor
