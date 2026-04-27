@@ -15,11 +15,17 @@ def create_venv(conn: Connection, python_instance: PythonInstance, venv_path: st
         if verbose:
             print(f"Created virtual environment at {venv_path} using Python {python_instance.version}")
 
-    return VenvPython(
-        python_instance=python_instance, 
-        venv_path=venv_path, 
+    venv = VenvPython(
+        python_instance=python_instance,
+        venv_path=venv_path,
         venv_name=PurePosixPath(venv_path).name
     )
+
+    if verbose:
+        print(f"Ensuring uv is installed in venv...")
+    run_in_venv(conn, venv, "pip install -q uv", verbose=False)
+
+    return venv
 
 def delete_venv(conn: Connection, venv: VenvPython, verbose: bool = True):
     conn.run(f"rm -rf {venv.venv_path}")

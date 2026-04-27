@@ -6,19 +6,40 @@ Simple Python server deployment toolkit. Deploy to remote servers with just a fe
 
 Tired of SSHing manually but Kubernetes is overkill for your $5 VPS? This is for you.
 
-- **300 lines of code** - Read and understand it in minutes
-- **Simple API** - If you can write Python, you can deploy
-- **Built on Fabric** - Mix with pure Fabric commands anytime
+- **Tiny codebase** — read it in minutes, no magic.
+- **Minimalist API by design** — every function does one thing and only takes what it needs. Nothing hidden, nothing global.
+- **Hard to misuse** — the API is built around small immutable classes (`PythonInstance`, `VenvPython`, `SupervisorService`). You can't pass the wrong thing to the wrong function. If your code typechecks, it'll likely run.
+- **Built on Fabric** — drop down to raw Fabric commands at any point. No abstraction lock-in.
+- **Fast deploys** — uses `uv` under the hood for package installation, with `pip` as fallback.
+
+## Design philosophy
+
+The API is built on a few small immutable types that flow through the functions:
+
+```python
+python = get_any_python_instance(conn)         # -> PythonInstance
+venv   = create_venv(conn, python, "/path")    # -> VenvPython (carries python info)
+install_packages(conn, venv, ["fastapi"])      # consumes VenvPython
+```
+
+You can't `install_packages` without first having a `VenvPython`. You can't get a
+`VenvPython` without a `PythonInstance`. The dependency chain is enforced by the
+types themselves, so the order of operations is obvious and mistakes are caught
+before runtime.
+
+There's no global config, no implicit state, no "init" call. Each function takes
+the connection and the data it needs, and returns the data the next step needs.
 
 ## Installation
 
+PIPY is coming soon. For now, install directly from GitHub:
 ```bash
 pip install git+https://github.com/offerrall/pyeasydeploy.git
 ```
 
 ## Examples
 
-### Deploy fast api app with supervisor
+### Deploy a FastAPI app with supervisor
 
 ```python
 from pyeasydeploy import *
@@ -30,11 +51,7 @@ PASSWORD = getpass("Enter the password for the remote user: ")
 NAME_PROGRAM = "pyshop_secrets"
 PROGRAM_FOLDER = f"./{NAME_PROGRAM}"
 
-connection = connect_to_host(
-    host=IP,
-    user=USER,
-    password=PASSWORD
-)
+connection = connect_to_host(host=IP, user=USER, password=PASSWORD)
 
 app_folder_dest = f"/home/{USER}/{NAME_PROGRAM}"
 venv_path = f"{app_folder_dest}/.venv"
@@ -57,10 +74,7 @@ if not check_supervisor_installed(connection):
     install_supervisor(connection)
 
 deploy_supervisor_service(connection, service)
-
-connection.sudo("supervisorctl reread")
-connection.sudo("supervisorctl update")
-connection.sudo(f"supervisorctl restart {NAME_PROGRAM}")
+supervisor_restart(connection, NAME_PROGRAM)
 ```
 
 ### Mix with pure Fabric commands
@@ -75,26 +89,25 @@ python = get_target_python_instance(conn, "3.11")
 venv = create_venv(conn, python, "/home/deploy/venv")
 install_packages(conn, venv, ["flask"])
 
-# Use pure Fabric
-conn.run("df -h")  # Check disk
-conn.sudo("systemctl restart nginx")  # Restart nginx
-conn.run("tail -100 /var/log/myapp.log")  # Check logs
+# Use pure Fabric whenever you need
+conn.run("df -h")
+conn.sudo("systemctl restart nginx")
+conn.run("tail -100 /var/log/myapp.log")
 
 # Back to pyeasydeploy
 supervisor_restart(conn, "myapp")
 ```
 
-### Update existing deployment
+### Update an existing deployment
 
 ```python
 from pyeasydeploy import *
 
 conn = connect_to_host(host="vps.example.com", user="deploy", key_filename="~/.ssh/deploy_key")
 
-# Upload new code
-upload_directory(conn, "./myapp", "/home/deploy/myapp", remove_if_exists=True) # overwrite existing / False to copy only new files
+# Upload new code (overwrite existing; pass remove_if_exists=False to merge)
+upload_directory(conn, "./myapp", "/home/deploy/myapp", remove_if_exists=True)
 
-# Restart service
 supervisor_restart(conn, "myapp")
 supervisor_status(conn, "myapp")
 ```
@@ -118,7 +131,7 @@ install_package_from_private_github(
 )
 ```
 
-### Run custom commands in venv
+### Run custom commands inside the venv
 
 ```python
 from pyeasydeploy import *
@@ -127,10 +140,7 @@ conn = connect_to_host(host="server.com", user="deploy", password="pass")
 python = get_target_python_instance(conn, "3.11")
 venv = create_venv(conn, python, "/home/deploy/venv")
 
-# Run migrations
 run_in_venv(conn, venv, "alembic upgrade head")
-
-# Run custom script
 run_in_venv(conn, venv, "python scripts/seed_db.py")
 ```
 
@@ -149,15 +159,22 @@ connect_to_host(host, user, password="...", port=22)
 ### Python & Venv
 
 ```python
-get_python_instances(conn)  # List all Python versions
-get_target_python_instance(conn, "3.11")  # Get specific version
-get_any_python_instance(conn)  # Get any available Python version (first found)
-create_venv(conn, python_instance, "/path/to/venv") # if not exists, creates venv
+get_python_instances(conn)                   # List all Python versions on the host
+get_target_python_instance(conn, "3.11")     # Get a specific version
+get_any_python_instance(conn)                # Get any available Python (first found)
+
+create_venv(conn, python_instance, "/path/to/venv")   # idempotent: skips if exists
 run_in_venv(conn, venv, "command")
-delete_venv(conn, "/path/to/venv")  # deletes existing venv
+delete_venv(conn, venv)
 ```
 
+`create_venv` automatically installs `uv` inside the venv so package operations
+are fast. This is idempotent — running it on an existing venv is a no-op.
+
 ### Packages
+
+By default, all package functions use `uv` for speed (set `use_uv=False` to fall
+back to `pip`).
 
 ```python
 install_packages(conn, venv, ["pkg1", "pkg2==1.0.0"])
@@ -196,12 +213,16 @@ supervisor_restart(conn, "myapp")
 supervisor_status(conn, "myapp")
 ```
 
+`SupervisorService` is a `NamedTuple` — immutable, fully typed, with sane
+defaults for `autostart`, `autorestart`, and log paths. You build it once,
+pass it around, and it can't be modified by accident.
+
 ## Requirements
 
 - Python 3.8+
 - fabric
 - paramiko
-- git (only required on the client for `install_package_from_private_github`)
+- git (only on the client, for `install_package_from_private_github`)
 
 ## Contributing
 
