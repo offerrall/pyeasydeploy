@@ -11,13 +11,13 @@ from .venv import run_in_venv
 def _pip(use_uv: bool) -> str:
     return "uv pip" if use_uv else "pip"
 
-def install_packages(conn: Connection, venv: VenvPython, packages: list[str], use_uv: bool = False, verbose: bool = True):
+def install_packages(conn: Connection, venv: VenvPython, packages: list[str], use_uv: bool = True, verbose: bool = True):
     packages_str = " ".join(packages)
     command = f"{_pip(use_uv)} install {packages_str}"
     if verbose: print(f"Installing packages in venv: {packages_str}")
     run_in_venv(conn, venv, command, verbose=False)
 
-def install_local_package(conn: Connection, venv: VenvPython, local_package_dir: str, use_uv: bool = False, verbose: bool = True):
+def install_local_package(conn: Connection, venv: VenvPython, local_package_dir: str, use_uv: bool = True, verbose: bool = True):
     package_name = Path(local_package_dir).name
     remote_temp_dir = f"/tmp/{package_name}"
     
@@ -30,12 +30,12 @@ def install_local_package(conn: Connection, venv: VenvPython, local_package_dir:
     if verbose: print(f"Cleaning up {remote_temp_dir}")
     conn.run(f"rm -rf {remote_temp_dir}", hide=True)
 
-def install_package_from_github(conn: Connection, venv: VenvPython, github_repo_url: str, use_uv: bool = False, verbose: bool = True):
+def install_package_from_github(conn: Connection, venv: VenvPython, github_repo_url: str, use_uv: bool = True, verbose: bool = True):
     command = f"{_pip(use_uv)} install git+{github_repo_url}"
     if verbose: print(f"Installing package from GitHub repo: {github_repo_url}")
     run_in_venv(conn, venv, command, verbose=False)
 
-def install_package_from_private_github(conn: Connection, venv: VenvPython, github_repo_url: str, branch: str | None = None, use_uv: bool = False, verbose: bool = True):
+def install_package_from_private_github(conn: Connection, venv: VenvPython, github_repo_url: str, branch: str | None = None, use_uv: bool = True, verbose: bool = True):
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_name = github_repo_url.rstrip("/").split("/")[-1].replace(".git", "")
         local_clone = Path(tmpdir) / repo_name
