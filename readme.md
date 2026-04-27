@@ -99,6 +99,25 @@ supervisor_restart(conn, "myapp")
 supervisor_status(conn, "myapp")
 ```
 
+### Install from a private GitHub repo
+
+The server doesn't need any GitHub credentials. The repo is cloned locally
+(using your client's Git auth) and uploaded to the server.
+
+```python
+from pyeasydeploy import *
+
+conn = connect_to_host(host="server.com", user="deploy", key_filename="~/.ssh/id_rsa")
+python = get_target_python_instance(conn, "3.11")
+venv = create_venv(conn, python, "/home/deploy/venv")
+
+install_package_from_private_github(
+    conn, venv,
+    "git@github.com:myorg/my-private-package.git",
+    branch="v1.2.0"
+)
+```
+
 ### Run custom commands in venv
 
 ```python
@@ -144,6 +163,10 @@ delete_venv(conn, "/path/to/venv")  # deletes existing venv
 install_packages(conn, venv, ["pkg1", "pkg2==1.0.0"])
 install_local_package(conn, venv, "./local_package")
 install_package_from_github(conn, venv, "https://github.com/user/repo")
+
+# Private repos: cloned on the client, uploaded to the server.
+# The server needs no GitHub auth. Requires `git` installed locally.
+install_package_from_private_github(conn, venv, "git@github.com:user/repo.git", branch="main")
 ```
 
 ### File Transfer
@@ -178,6 +201,7 @@ supervisor_status(conn, "myapp")
 - Python 3.8+
 - fabric
 - paramiko
+- git (only required on the client for `install_package_from_private_github`)
 
 ## Contributing
 

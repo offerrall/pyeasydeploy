@@ -1,8 +1,11 @@
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from fabric import Connection
 
 from . import VenvPython
-from .transfer import upload_file, upload_directory
+from .transfer import upload_directory
 from .venv import run_in_venv
 
 def install_packages(conn: Connection, venv: VenvPython, packages: list[str], verbose: bool = True):
@@ -28,3 +31,22 @@ def install_package_from_github(conn: Connection, venv: VenvPython, github_repo_
     command = f"pip install git+{github_repo_url}"
     if verbose: print(f"Installing package from GitHub repo: {github_repo_url}")
     run_in_venv(conn, venv, command, verbose=False)
+
+def install_package_from_private_github(conn: Connection, venv: VenvPython, github_repo_url: str, branch: str | None = None, verbose: bool = True):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo_name = github_repo_url.rstrip("/").split("/")[-1].replace(".git", "")
+        local_clone = Path(tmpdir) / repo_name
+
+        clone_cmd = ["git", "clone", "--depth", "1"]
+        if branch:
+            clone_cmd += ["--branch", branch]
+        clone_cmd += [github_repo_url, str(local_clone)]
+
+        if verbose: print(f"Cloning {github_repo_url} locally...")
+        result = subprocess.run(clone_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"git clone failed: {result.stderr.strip()}")
+
+        shutil.rmtree(local_clone / ".git", ignore_errors=True)
+
+        install_local_package(conn, venv, str(local_clone), verbose=verbose)
