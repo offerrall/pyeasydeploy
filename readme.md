@@ -1,5 +1,7 @@
 # pyeasydeploy 0.1.0
 
+[![PyPI](https://img.shields.io/pypi/v/pygrbl_streamer.svg)](https://pypi.org/project/pyeasydeploy/)
+
 A small library for deploying Python applications to Linux servers over SSH. Plain Python functions on top of [Fabric](https://www.fabfile.org/): no agents on the server, no YAML, no DSL to learn. Your deploy script reads top to bottom.
 
 It doesn't try to compete with Ansible or Docker. If you have a few servers, you write Python, and you want your deploy to be just another `deploy.py` in your project, it might be for you.
