@@ -1,65 +1,103 @@
-from typing import NamedTuple, Optional
-from fabric import Connection
+"""pyeasydeploy — deploy Python apps to Linux servers over SSH.
 
-def connect_to_host(
-    host: str, 
-    user: str, 
-    password: Optional[str] = None, 
-    key_filename: Optional[str] = None,
-    port: int = 22
-) -> Connection:
-    """
-    Connect to a remote host via SSH.
-    
-    Args:
-        host: Remote host address
-        user: Username for SSH connection
-        password: Password for authentication (optional)
-        key_filename: Path to SSH private key file (optional)
-        port: SSH port (default: 22)
-    
-    Returns:
-        Fabric Connection object
-    
-    Raises:
-        ValueError: If neither password nor key_filename is provided
-    """
-    if password is None and key_filename is None:
-        raise ValueError("You must provide either 'password' or 'key_filename' for authentication")
-    
-    if password is not None and key_filename is not None:
-        raise ValueError("Provide either 'password' or 'key_filename', not both")
-    
-    connect_kwargs = {}
-    
-    if password is not None:
-        connect_kwargs["password"] = password
-    elif key_filename is not None:
-        connect_kwargs["key_filename"] = key_filename
-    
-    conn = Connection(
-        host=host,
-        user=user,
-        port=port,
-        connect_kwargs=connect_kwargs
+No agents, no YAML, no magic: plain Python functions that do exactly
+what they say. See the README for the philosophy (destructive and
+reproducible uploads, fail-fast validation, trust in the user).
+
+Typical flow::
+
+    from pyeasydeploy import (
+        connect_to_host, get_target_python_instance, create_venv,
+        install_local_package, deploy_supervisor_service,
+        SupervisorService,
     )
-    
-    if password is not None:
-        conn.config.sudo.password = password
-    
-    return conn
 
-class PythonInstance(NamedTuple):
-    version: str
-    executable: str
+    conn = connect_to_host(host, user, key_filename="~/.ssh/id_ed25519",
+                           sudo_password="...")
+    py = get_target_python_instance(conn, "3.11")
+    venv = create_venv(conn, py, "/home/deploy/venvs/myapp")
+    install_local_package(conn, venv, "./myapp")
+    deploy_supervisor_service(conn, SupervisorService(
+        name="myapp",
+        command="/home/deploy/venvs/myapp/bin/python -m myapp",
+    ))
+"""
 
-class VenvPython(NamedTuple):
-    venv_name: str
-    python_instance: PythonInstance
-    venv_path: str
+__version__ = "0.1.0"
 
-from .packages import *
-from .python import *
-from .venv import *
-from .transfer import *
-from .supervisor import *
+# Models (foundation layer; importable standalone)
+from .models import PythonInstance, SupervisorService, VenvPython
+
+# Connection
+from .connection import connect_to_host, has_sudo_password, require_sudo
+
+# Remote Python discovery
+from .python import (
+    get_any_python_instance,
+    get_python_instances,
+    get_target_python_instance,
+)
+
+# Virtual environments
+from .venv import create_venv, delete_venv, run_in_venv
+
+# File transfer
+from .transfer import DEFAULT_IGNORE, upload_directory, upload_file
+
+# Package installation
+from .packages import (
+    install_local_package,
+    install_package_from_github,
+    install_package_from_private_github,
+    install_packages,
+)
+
+# Supervisor services
+from .supervisor import (
+    check_supervisor_installed,
+    create_supervisor_config,
+    deploy_supervisor_service,
+    install_supervisor,
+    supervisor_restart,
+    supervisor_start,
+    supervisor_status,
+    supervisor_stop,
+)
+
+__all__ = [
+    "__version__",
+    # models
+    "PythonInstance",
+    "VenvPython",
+    "SupervisorService",
+    # connection
+    "connect_to_host",
+    "has_sudo_password",
+    "require_sudo",
+    # python
+    "get_python_instances",
+    "get_target_python_instance",
+    "get_any_python_instance",
+    # venv
+    "create_venv",
+    "delete_venv",
+    "run_in_venv",
+    # transfer
+    "upload_file",
+    "upload_directory",
+    "DEFAULT_IGNORE",
+    # packages
+    "install_packages",
+    "install_local_package",
+    "install_package_from_github",
+    "install_package_from_private_github",
+    # supervisor
+    "install_supervisor",
+    "check_supervisor_installed",
+    "create_supervisor_config",
+    "deploy_supervisor_service",
+    "supervisor_start",
+    "supervisor_stop",
+    "supervisor_restart",
+    "supervisor_status",
+]

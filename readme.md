@@ -1,252 +1,135 @@
-# pyeasydeploy
+# pyeasydeploy 0.1.0
 
-Simple Python server deployment toolkit. Deploy to remote servers with just a few lines of code.
+A small library for deploying Python applications to Linux servers over SSH. Plain Python functions on top of [Fabric](https://www.fabfile.org/): no agents on the server, no YAML, no DSL to learn. Your deploy script reads top to bottom.
 
-## Why?
+It doesn't try to compete with Ansible or Docker. If you have a few servers, you write Python, and you want your deploy to be just another `deploy.py` in your project, it might be for you.
 
-Tired of SSHing manually but Kubernetes is overkill for your $5 VPS? This is for you.
-
-- **Tiny codebase** — read it in minutes, no magic.
-- **Minimalist API by design** — every function does one thing and only takes what it needs. Nothing hidden, nothing global.
-- **Hard to misuse** — the API is built around small immutable classes (`PythonInstance`, `VenvPython`, `SupervisorService`). You can't pass the wrong thing to the wrong function. If your code typechecks, it'll likely run.
-- **Built on Fabric** — drop down to raw Fabric commands at any point. No abstraction lock-in.
-- **Fast deploys** — uses `uv` under the hood for package installation, with `pip` as fallback.
-
-## Design philosophy
-
-The API is built on a few small immutable types that flow through the functions:
+## A complete deploy
 
 ```python
-python = get_any_python_instance(conn)         # -> PythonInstance
-venv   = create_venv(conn, python, "/path")    # -> VenvPython (carries python info)
-install_packages(conn, venv, ["fastapi"])      # consumes VenvPython
+from pyeasydeploy import (
+    SupervisorService, connect_to_host, create_venv,
+    deploy_supervisor_service, get_target_python_instance,
+    install_local_package,
+)
+
+APP = "myapp"
+USER = "deploy"
+
+conn = connect_to_host(
+    host="203.0.113.10",
+    user=USER,
+    key_filename="~/.ssh/id_ed25519",
+    sudo_password="...",   # better: os.environ["SUDO_PASSWORD"]
+)
+
+py = get_target_python_instance(conn, "3.11")
+venv = create_venv(conn, py, f"/home/{USER}/venvs/{APP}")
+install_local_package(conn, venv, f"./{APP}")
+
+deploy_supervisor_service(conn, SupervisorService(
+    name=APP,
+    command=f"{venv.venv_path}/bin/python -m {APP}",
+    directory=f"/home/{USER}",
+    user=USER,
+))
 ```
 
-You can't `install_packages` without first having a `VenvPython`. You can't get a
-`VenvPython` without a `PythonInstance`. The dependency chain is enforced by the
-types themselves, so the order of operations is obvious and mistakes are caught
-before runtime.
+Connect, pick an interpreter, create the venv, install your package with its dependencies, and leave it running as a supervised service that survives reboots. The `venv` object returned by `create_venv` carries its own path: the service command is built from it, no paths repeated by hand.
 
-There's no global config, no implicit state, no "init" call. Each function takes
-the connection and the data it needs, and returns the data the next step needs.
+## The ideas behind it
+
+**Destructive and reproducible.** Uploads remove the destination and copy from scratch, every time. After each deploy, the server has exactly what you have locally — no leftovers from previous versions. This is not configurable; it's the contract. (The one safety net: paths like `/`, `/home` or `/etc` are rejected as destinations.)
+
+**Fail early, fail clearly.** Models validate on construction: a relative path or a service name that would corrupt the INI file blows up on your laptop with a useful message, before touching the server. Functions that need sudo check for it upfront — an immediate error with instructions, instead of the classic hang waiting for a password that will never come.
+
+**Trust the user.** The library validates *form* (types, absolute paths, dangerous characters), not your *facts*: if you hand-build a `PythonInstance` pointing at an exotic interpreter, it's accepted. You know what's on your server.
 
 ## Installation
 
-PyPI is coming soon. For now, install directly from GitHub:
-
 ```bash
-pip install git+https://github.com/offerrall/pyeasydeploy.git
+pip install pyeasydeploy
 ```
 
-## Examples
+Python ≥ 3.10 on your machine. On the server: SSH and some `python3` (tested on Debian/Ubuntu).
 
-### Deploy a FastAPI app with supervisor
+## Quick guide
+
+### Connecting
 
 ```python
-from pyeasydeploy import *
-from getpass import getpass
-
-IP = "192.168.0.100"
-USER = "offeytb"
-PASSWORD = getpass("Enter the password for the remote user: ")
-NAME_PROGRAM = "pyshop_secrets"
-PROGRAM_FOLDER = f"./{NAME_PROGRAM}"
-
-connection = connect_to_host(host=IP, user=USER, password=PASSWORD)
-
-app_folder_dest = f"/home/{USER}/{NAME_PROGRAM}"
-venv_path = f"{app_folder_dest}/.venv"
-
-upload_directory(connection, PROGRAM_FOLDER, app_folder_dest)
-
-python = get_any_python_instance(connection)
-venv = create_venv(connection, python, venv_path)
-
-install_packages(connection, venv, ["fastapi", "uvicorn", "tinydb"])
-
-service = SupervisorService(
-    name=NAME_PROGRAM,
-    command=f"{venv.venv_path}/bin/uvicorn main:app --host 0.0.0.0 --port 9101",
-    directory=app_folder_dest,
-    user=USER
-)
-
-if not check_supervisor_installed(connection):
-    install_supervisor(connection)
-
-deploy_supervisor_service(connection, service)
-supervisor_restart(connection, NAME_PROGRAM)
+conn = connect_to_host(host, user, password="...")                    # password (reused for sudo)
+conn = connect_to_host(host, user, key_filename="~/.ssh/id_ed25519")  # SSH key
 ```
 
-### Mix with pure Fabric commands
+With key auth and sudo operations, add `sudo_password=`. The connection is lazy: a wrong password shows up on the first command, not at connect time.
+
+### Remote Python
 
 ```python
-from pyeasydeploy import *
-
-conn = connect_to_host(host="server.com", user="deploy", key_filename="~/.ssh/id_rsa")
-
-# Use pyeasydeploy
-python = get_target_python_instance(conn, "3.11")
-venv = create_venv(conn, python, "/home/deploy/venv")
-install_packages(conn, venv, ["flask"])
-
-# Use pure Fabric whenever you need
-conn.run("df -h")
-conn.sudo("systemctl restart nginx")
-conn.run("tail -100 /var/log/myapp.log")
-
-# Back to pyeasydeploy
-supervisor_restart(conn, "myapp")
+py = get_any_python_instance(conn)             # newest on the server
+py = get_target_python_instance(conn, "3.11")  # a specific one
 ```
 
-### Update an existing deployment
+Only real interpreters are matched (`python3.X-config` and friends are filtered out), and version matching is component-wise: `"3.1"` means 3.1, not 3.11. For non-standard locations, build the model yourself:
 
 ```python
-from pyeasydeploy import *
-
-conn = connect_to_host(host="vps.example.com", user="deploy", key_filename="~/.ssh/deploy_key")
-
-# Upload new code (overwrite existing; pass remove_if_exists=False to merge)
-upload_directory(conn, "./myapp", "/home/deploy/myapp", remove_if_exists=True)
-
-supervisor_restart(conn, "myapp")
-supervisor_status(conn, "myapp")
+py = PythonInstance(version="3.12", executable="/opt/py312/bin/python3.12")
 ```
 
-### Install from a private GitHub repo
-
-The server doesn't need any GitHub credentials. The repo is cloned locally
-(using your client's Git auth) and uploaded to the server.
+### Venvs and packages
 
 ```python
-from pyeasydeploy import *
+venv = create_venv(conn, py, "/home/deploy/venvs/myapp")  # idempotent
 
-conn = connect_to_host(host="server.com", user="deploy", key_filename="~/.ssh/id_rsa")
-python = get_target_python_instance(conn, "3.11")
-venv = create_venv(conn, python, "/home/deploy/venv")
+install_packages(conn, venv, ["fastapi", "uvicorn[standard]"])
+install_local_package(conn, venv, "./myapp")
+install_package_from_private_github(conn, venv, "git@github.com:org/private.git")
 
-install_package_from_private_github(
-    conn, venv,
-    "git@github.com:myorg/my-private-package.git",
-    branch="v1.2.0"
-)
+run_in_venv(conn, venv, "python -m myapp --check")
 ```
 
-### Run custom commands inside the venv
+Installs use `uv` inside the venv (fast; `use_uv=False` for classic pip). Private repos are cloned **on your machine** with your own credentials, then the source is uploaded: the server never needs access to your GitHub.
+
+### Files
 
 ```python
-from pyeasydeploy import *
-
-conn = connect_to_host(host="server.com", user="deploy", password="pass")
-python = get_target_python_instance(conn, "3.11")
-venv = create_venv(conn, python, "/home/deploy/venv")
-
-run_in_venv(conn, venv, "alembic upgrade head")
-run_in_venv(conn, venv, "python scripts/seed_db.py")
+upload_directory(conn, "./data", "/home/deploy/data")
+upload_file(conn, "config.toml", "/home/deploy/myapp/config.toml")
 ```
 
-## API Reference
+⚠️ Destructive: the destination is removed before copying. `.git`, `__pycache__`, venvs and similar are excluded by default (`DEFAULT_IGNORE`); pass `ignore=[]` to upload everything.
 
-### Connection
-
-```python
-# With SSH key (recommended)
-connect_to_host(host, user, key_filename="/path/to/key", port=22)
-
-# With password (testing only)
-connect_to_host(host, user, password="...", port=22)
-```
-
-### Python & Venv
+### Services
 
 ```python
-get_python_instances(conn)                   # List all Python versions on the host
-get_target_python_instance(conn, "3.11")     # Get a specific version
-get_any_python_instance(conn)                # Get any available Python (first found)
+install_supervisor(conn)   # once per server
 
-create_venv(conn, python_instance, "/path/to/venv")   # idempotent: skips if exists
-run_in_venv(conn, venv, "command")
-delete_venv(conn, venv)
-```
-
-`create_venv` automatically installs `uv` inside the venv so package operations
-are fast. This is idempotent — running it on an existing venv is a no-op.
-
-### Packages
-
-By default, all package functions use `uv` for speed (set `use_uv=False` to fall
-back to `pip`).
-
-```python
-install_packages(conn, venv, ["pkg1", "pkg2==1.0.0"])
-install_local_package(conn, venv, "./local_package")
-install_package_from_github(conn, venv, "https://github.com/user/repo")
-
-# Private repos: cloned on the client, uploaded to the server.
-# The server needs no GitHub auth. Requires `git` installed locally.
-install_package_from_private_github(conn, venv, "git@github.com:user/repo.git", branch="main")
-```
-
-### File Transfer
-
-```python
-upload_file(conn, "./local/file.py", "/remote/path/file.py", remove_if_exists=True)
-upload_directory(conn, "./local_dir", "/remote/dir", remove_if_exists=True)
-```
-
-`upload_directory` automatically skips common junk that shouldn't be deployed:
-`.git`, `.venv`, `__pycache__`, IDE folders, `*.pyc`, local SQLite files, etc.
-This keeps deploys fast and avoids shipping development artifacts to the server.
-
-You can override the filter with the `ignore` parameter (accepts globs via
-`fnmatch`):
-
-```python
-# Use your own list (replaces the defaults)
-upload_directory(conn, "./myapp", "/home/deploy/myapp", ignore=[".git", "*.log"])
-
-# Disable filtering entirely (upload everything)
-upload_directory(conn, "./myapp", "/home/deploy/myapp", ignore=[])
-
-# Extend the defaults
-from pyeasydeploy import DEFAULT_IGNORE
-upload_directory(conn, "./myapp", "/home/deploy/myapp", ignore=DEFAULT_IGNORE + ["secrets.env"])
-```
-
-### Supervisor
-
-```python
-install_supervisor(conn)
-check_supervisor_installed(conn)
-
-service = SupervisorService(
+deploy_supervisor_service(conn, SupervisorService(
     name="myapp",
-    command="/path/to/command",
-    directory="/working/dir",
-    user="username"
-)
+    command=f"{venv.venv_path}/bin/python -m myapp",
+    extra={
+        "stdout_logfile_maxbytes": "10MB",   # any supervisord option,
+        "stdout_logfile_backups": 5,         # passed through verbatim
+        "stopsignal": "INT",
+    },
+))
 
-deploy_supervisor_service(conn, service)
-supervisor_start(conn, "myapp")
-supervisor_stop(conn, "myapp")
+supervisor_status(conn)
 supervisor_restart(conn, "myapp")
-supervisor_status(conn, "myapp")
 ```
 
-`SupervisorService` is a `NamedTuple` — immutable, fully typed, with sane
-defaults for `autostart`, `autorestart`, and log paths. You build it once,
-pass it around, and it can't be modified by accident.
+Named fields cover the common cases; the `extra` dict accepts any supervisord option with no restrictions — the library only blocks what would corrupt the generated file.
 
-## Requirements
+## What it is not
 
-- Python 3.8+
-- fabric
-- paramiko
-- git (only on the client, for `install_package_from_private_github`)
+- **Not Ansible/Terraform.** No inventories, no state, no declarative idempotency. Imperative on purpose.
+- **Not provisioning.** It installs supervisor because services are its job, and that's where it stops: nginx, databases and the rest of your server are up to you.
+- **No secret management.** The passwords you pass in are your environment's responsibility.
+- **No fleet orchestration.** One connection, one server. For several, write a loop.
+- **Linux targets only.** The source machine can be Windows, macOS or Linux.
 
-## Contributing
-
-PRs welcome! This is a small tool I built for myself. If there's interest, I'll publish to PyPI and add more features.
+For many of those cases, bigger tools will do it better. This one exists for when you don't need them.
 
 ## License
 
