@@ -12,7 +12,7 @@ It doesn't try to compete with Ansible or Docker. If you have a few servers, you
 from pyeasydeploy import (
     SupervisorService, connect_to_host, create_venv,
     deploy_supervisor_service, get_target_python_instance,
-    install_local_package,
+    install_local_package, supervisor_restart,
 )
 
 APP = "myapp"
@@ -35,6 +35,7 @@ deploy_supervisor_service(conn, SupervisorService(
     directory=f"/home/{USER}",
     user=USER,
 ))
+supervisor_restart(conn, APP)
 ```
 
 Connect, pick an interpreter, create the venv, install your package with its dependencies, and leave it running as a supervised service that survives reboots. The `venv` object returned by `create_venv` carries its own path: the service command is built from it, no paths repeated by hand.
@@ -116,9 +117,9 @@ deploy_supervisor_service(conn, SupervisorService(
         "stopsignal": "INT",
     },
 ))
+supervisor_restart(conn, "myapp")
 
 supervisor_status(conn)
-supervisor_restart(conn, "myapp")
 ```
 
 Named fields cover the common cases; the `extra` dict accepts any supervisord option with no restrictions — the library only blocks what would corrupt the generated file.
