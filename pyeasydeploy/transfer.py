@@ -36,8 +36,19 @@ _FORBIDDEN_DESTINATIONS = frozenset(
 )
 
 
-def _check_destination(remote_path: str) -> str:
-    """Reject remote destinations that would wipe a system root.
+def check_destination(remote_path: str) -> str:
+    """Reject remote paths that would wipe a system root.
+
+    Shared by every destructive operation in the library (uploads here,
+    venv creation/deletion in venv.py): all of them start with an
+    'rm -rf' on the path, so a typo like "/" or "/home" must fail
+    before any remote command runs.
+
+    Args:
+        remote_path: Absolute remote path about to be removed.
+
+    Returns:
+        The normalized path (redundant separators and "." collapsed).
 
     Raises:
         TypeError: If remote_path is not a str.
@@ -57,11 +68,24 @@ def _check_destination(remote_path: str) -> str:
         )
     if normalized in _FORBIDDEN_DESTINATIONS:
         raise ValueError(
-            f"Refusing {remote_path!r} as deploy destination: it is a "
-            "system root and uploads are destructive (the destination "
-            "is removed first). Use a subdirectory instead."
+            f"Refusing {remote_path!r} as destination: it is a system "
+            "root and this operation is destructive (the path is "
+            "removed first). Use a subdirectory instead."
         )
     return normalized
+
+
+def _check_mode(mode: int) -> int:
+    """Require a valid POSIX permission bitmask. Returns the value."""
+    # bool is an int subclass: True would silently become mode 1.
+    if not isinstance(mode, int) or isinstance(mode, bool):
+        raise TypeError(f"mode must be int, got {type(mode).__name__}")
+    if not 0 <= mode <= 0o7777:
+        raise ValueError(
+            f"mode must be a permission bitmask between 0 and 0o7777, "
+            f"got {mode!r} (octal {mode:o}). Write it in octal: 0o644."
+        )
+    return mode
 
 
 def upload_file(
@@ -69,6 +93,7 @@ def upload_file(
     local_file: str,
     remote_file: str,
     verbose: bool = True,
+    mode: Optional[int] = None,
 ) -> None:
     """Upload a single file to the remote host.
 
@@ -80,14 +105,21 @@ def upload_file(
         local_file: Path to the local file.
         remote_file: Absolute remote destination path.
         verbose: Print progress to stdout.
+        mode: POSIX permissions to apply after upload, as an octal int
+            (e.g. 0o644, 0o755). None leaves whatever SFTP decides,
+            which depends on the source machine — pass a mode when you
+            need the result to be the same from every machine.
 
     Raises:
         TypeError / ValueError: If remote_file is not an absolute path
-            or is a protected system root.
+            or is a protected system root, or mode is not a valid
+            permission bitmask.
         FileNotFoundError: If local_file does not exist or is not a
             file.
     """
-    remote_file = _check_destination(remote_file)
+    remote_file = check_destination(remote_file)
+    if mode is not None:
+        _check_mode(mode)
     local_path = Path(local_file)
     if not local_path.is_file():
         raise FileNotFoundError(f"Local file not found: {local_file}")
@@ -100,6 +132,8 @@ def upload_file(
     if verbose:
         print(f"Uploading {local_file} to {remote_file}")
     conn.put(str(local_path), remote_file)
+    if mode is not None:
+        conn.run(f"chmod {mode:o} {shlex.quote(remote_file)}", hide=True)
     if verbose:
         print("Upload complete")
 
@@ -110,6 +144,7 @@ def upload_directory(
     remote_dir: str,
     ignore: Optional[List[str]] = None,
     verbose: bool = True,
+    mode: Optional[int] = None,
 ) -> None:
     """Upload a local directory tree to the remote host.
 
@@ -125,14 +160,22 @@ def upload_directory(
             directory names, not paths). None uses DEFAULT_IGNORE;
             pass [] to upload everything.
         verbose: Print progress to stdout.
+        mode: POSIX permissions to apply to every uploaded FILE in the
+            tree, as an octal int (e.g. 0o644). Directories keep the
+            remote umask. None leaves whatever SFTP decides, which
+            depends on the source machine — pass a mode when you need
+            the result to be the same from every machine.
 
     Raises:
         TypeError / ValueError: If remote_dir is not an absolute path
-            or is a protected system root.
+            or is a protected system root, or mode is not a valid
+            permission bitmask.
         FileNotFoundError: If local_dir does not exist or is not a
             directory.
     """
-    remote_dir = _check_destination(remote_dir)
+    remote_dir = check_destination(remote_dir)
+    if mode is not None:
+        _check_mode(mode)
     local_path = Path(local_dir)
     if not local_path.is_dir():
         raise FileNotFoundError(f"Local directory not found: {local_dir}")
@@ -169,6 +212,15 @@ def upload_directory(
             local_file = Path(root) / file_name
             remote_file = str(PurePosixPath(remote_root) / file_name)
             conn.put(str(local_file), remote_file)
+
+    if mode is not None:
+        # One find for the whole tree: chmod per file would be one SSH
+        # round-trip per file.
+        conn.run(
+            f"find {shlex.quote(remote_dir)} -type f "
+            f"-exec chmod {mode:o} {{}} +",
+            hide=True,
+        )
 
     if verbose:
         print("Upload complete")

@@ -2,7 +2,8 @@
 
 No agents, no YAML, no magic: plain Python functions that do exactly
 what they say. See the README for the philosophy (destructive and
-reproducible uploads, fail-fast validation, trust in the user).
+reproducible uploads and venvs, fail-fast validation, trust in the
+user) and for what falls outside that guarantee.
 
 Typical flow::
 
@@ -23,7 +24,7 @@ Typical flow::
     ))
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.5"
 
 # Models (foundation layer; importable standalone)
 from .models import PythonInstance, SupervisorService, VenvPython

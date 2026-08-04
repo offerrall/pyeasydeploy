@@ -21,8 +21,11 @@ from .transfer import upload_directory
 from .venv import run_in_venv
 
 
-def _pip(use_uv: bool) -> str:
-    return "uv pip" if use_uv else "python -m pip"
+def _install_cmd(use_uv: bool, force: bool, target: str) -> str:
+    """Build the install command line (target must be quoted already)."""
+    pip = "uv pip" if use_uv else "python -m pip"
+    flags = " --force-reinstall" if force else ""
+    return f"{pip} install{flags} {target}"
 
 
 def _make_remote_tempdir(conn: Connection) -> str:
@@ -41,6 +44,7 @@ def install_packages(
     packages: List[str],
     use_uv: bool = True,
     verbose: bool = True,
+    force: bool = False,
 ) -> None:
     """Install packages from PyPI into the remote venv.
 
@@ -51,6 +55,11 @@ def install_packages(
             "uvicorn[standard]", "requests>=2.31"].
         use_uv: Install with 'uv pip' (fast, default) instead of pip.
         verbose: Print progress to stdout.
+        force: Pass --force-reinstall, reinstalling even when the
+            requirement is already satisfied. Not needed with a freshly
+            created venv (the default); useful with create_venv(...,
+            recreate=False), where pip would otherwise keep a package
+            whose version did not change.
 
     Raises:
         TypeError: If packages is not a list of str.
@@ -66,7 +75,7 @@ def install_packages(
     quoted = " ".join(shlex.quote(pkg) for pkg in packages)
     if verbose:
         print(f"Installing packages in venv: {', '.join(packages)}")
-    run_in_venv(conn, venv, f"{_pip(use_uv)} install {quoted}",
+    run_in_venv(conn, venv, _install_cmd(use_uv, force, quoted),
                 verbose=False, hide=True)
 
 
@@ -76,6 +85,7 @@ def install_local_package(
     local_package_dir: str,
     use_uv: bool = True,
     verbose: bool = True,
+    force: bool = False,
 ) -> None:
     """Upload a local package directory and install it into the venv.
 
@@ -91,6 +101,11 @@ def install_local_package(
         local_package_dir: Path to the local package root.
         use_uv: Install with 'uv pip' (fast, default) instead of pip.
         verbose: Print progress to stdout.
+        force: Pass --force-reinstall. THE COMMON CASE for local
+            packages when reusing a venv (create_venv(...,
+            recreate=False)): pip compares versions, not commits, so
+            new code shipped under the same version number is ignored
+            and the server keeps running the old one, silently.
 
     Raises:
         FileNotFoundError: If local_package_dir does not exist (from
@@ -102,7 +117,7 @@ def install_local_package(
         if verbose:
             print(f"Installing package from {remote_temp}")
         run_in_venv(conn, venv,
-                    f"{_pip(use_uv)} install {shlex.quote(remote_temp)}",
+                    _install_cmd(use_uv, force, shlex.quote(remote_temp)),
                     verbose=False, hide=True)
     finally:
         if verbose:
@@ -116,6 +131,7 @@ def install_package_from_github(
     github_repo_url: str,
     use_uv: bool = True,
     verbose: bool = True,
+    force: bool = False,
 ) -> None:
     """Install a package from a public GitHub repository.
 
@@ -130,11 +146,16 @@ def install_package_from_github(
             "https://github.com/user/repo".
         use_uv: Install with 'uv pip' (fast, default) instead of pip.
         verbose: Print progress to stdout.
+        force: Pass --force-reinstall. Needed when reusing a venv and
+            the branch moved without a version bump: pip compares
+            versions, not commits, so the new commit would be ignored
+            and the server would keep running the old code.
     """
     if verbose:
         print(f"Installing package from GitHub repo: {github_repo_url}")
     run_in_venv(conn, venv,
-                f"{_pip(use_uv)} install {shlex.quote('git+' + github_repo_url)}",
+                _install_cmd(use_uv, force,
+                             shlex.quote("git+" + github_repo_url)),
                 verbose=False, hide=True)
 
 
@@ -145,6 +166,7 @@ def install_package_from_private_github(
     branch: str = None,
     use_uv: bool = True,
     verbose: bool = True,
+    force: bool = False,
 ) -> None:
     """Install a package from a private GitHub repository.
 
@@ -159,6 +181,10 @@ def install_package_from_private_github(
         branch: Branch or tag to clone. None uses the default branch.
         use_uv: Install with 'uv pip' (fast, default) instead of pip.
         verbose: Print progress to stdout.
+        force: Pass --force-reinstall. Needed when reusing a venv and
+            the branch moved without a version bump: pip compares
+            versions, not commits, so the new commit would be ignored
+            and the server would keep running the old code.
 
     Raises:
         RuntimeError: If the local 'git clone' fails (bad URL, no
@@ -184,4 +210,4 @@ def install_package_from_private_github(
         shutil.rmtree(local_clone / ".git", ignore_errors=True)
 
         install_local_package(conn, venv, str(local_clone),
-                              use_uv=use_uv, verbose=verbose)
+                              use_uv=use_uv, verbose=verbose, force=force)

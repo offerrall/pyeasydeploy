@@ -1,4 +1,4 @@
-# pyeasydeploy 0.1.0
+# pyeasydeploy 0.1.5
 
 [![PyPI](https://img.shields.io/pypi/v/pygrbl_streamer.svg)](https://pypi.org/project/pyeasydeploy/)
 
@@ -42,7 +42,7 @@ Connect, pick an interpreter, create the venv, install your package with its dep
 
 ## The ideas behind it
 
-**Destructive and reproducible.** Uploads remove the destination and copy from scratch, every time. After each deploy, the server has exactly what you have locally — no leftovers from previous versions. This is not configurable; it's the contract. (The one safety net: paths like `/`, `/home` or `/etc` are rejected as destinations.)
+**Destructive and reproducible.** Uploads remove the destination and copy from scratch, every time; venvs are recreated, not reused. After each deploy, the server has exactly what your script says it should have — no leftovers from previous versions. (The one safety net: paths like `/`, `/home` or `/etc` are rejected before anything is removed.) See [Reproducibility](#reproducibility) for how far that guarantee reaches.
 
 **Fail early, fail clearly.** Models validate on construction: a relative path or a service name that would corrupt the INI file blows up on your laptop with a useful message, before touching the server. Functions that need sudo check for it upfront — an immediate error with instructions, instead of the classic hang waiting for a password that will never come.
 
@@ -83,7 +83,7 @@ py = PythonInstance(version="3.12", executable="/opt/py312/bin/python3.12")
 ### Venvs and packages
 
 ```python
-venv = create_venv(conn, py, "/home/deploy/venvs/myapp")  # idempotent
+venv = create_venv(conn, py, "/home/deploy/venvs/myapp")  # wiped and rebuilt
 
 install_packages(conn, venv, ["fastapi", "uvicorn[standard]"])
 install_local_package(conn, venv, "./myapp")
@@ -92,6 +92,15 @@ install_package_from_private_github(conn, venv, "git@github.com:org/private.git"
 run_in_venv(conn, venv, "python -m myapp --check")
 ```
 
+⚠️ **Changed in 0.1.5:** `create_venv` deletes the existing environment and builds a new one. If you relied on reuse, pass `recreate=False` explicitly.
+
+```python
+venv = create_venv(conn, py, "/home/deploy/venvs/myapp", recreate=False)
+install_local_package(conn, venv, "./myapp", force=True)   # see below
+```
+
+Reuse is for development, when reinstalling a large environment on every run is expensive. It comes with a catch: pip compares **versions, not commits**, so new code shipped under the same version number is silently ignored and the server keeps running the old one. `force=True` (available on all four `install_*` functions) passes `--force-reinstall` and fixes it. With the default `recreate=True` you don't need it.
+
 Installs use `uv` inside the venv (fast; `use_uv=False` for classic pip). Private repos are cloned **on your machine** with your own credentials, then the source is uploaded: the server never needs access to your GitHub.
 
 ### Files
@@ -99,9 +108,14 @@ Installs use `uv` inside the venv (fast; `use_uv=False` for classic pip). Privat
 ```python
 upload_directory(conn, "./data", "/home/deploy/data")
 upload_file(conn, "config.toml", "/home/deploy/myapp/config.toml")
+
+upload_directory(conn, "./data", "/home/deploy/data", mode=0o644)      # every file
+upload_file(conn, "secrets.env", "/home/deploy/myapp/.env", mode=0o600)
 ```
 
 ⚠️ Destructive: the destination is removed before copying. `.git`, `__pycache__`, venvs and similar are excluded by default (`DEFAULT_IGNORE`); pass `ignore=[]` to upload everything.
+
+Without `mode`, permissions are whatever SFTP decides, which depends on the machine you deploy from — pass it when two people deploying the same project must get the same result. In `upload_directory` it applies to every file in the tree; directories keep the remote umask.
 
 ### Services
 
@@ -123,6 +137,34 @@ supervisor_status(conn)
 ```
 
 Named fields cover the common cases; the `extra` dict accepts any supervisord option with no restrictions — the library only blocks what would corrupt the generated file.
+
+## Reproducibility
+
+The goal: **after a deploy, the parts of the server the library owns are a function of your script, not of what was there before.** Run the same script twice, or run it against a fresh server, and you get the same result.
+
+What that covers:
+
+- **Uploads.** `upload_file` and `upload_directory` remove the destination first. The remote tree is exactly your local tree minus the ignored patterns. Add `mode=` and the permissions stop depending on the machine you deploy from too.
+- **Venvs.** `create_venv` wipes and rebuilds by default. Packages you stopped declaring disappear, pinned versions really apply, and changing the target Python version actually changes the interpreter — none of which happens in a reused venv.
+- **Services.** The `.conf` for a deployed service is rewritten from the `SupervisorService` model every time. What you declare is what supervisord reads.
+
+What it does **not** cover — real gaps, not oversights:
+
+- **System packages and OS state.** apt, users, nginx, databases, firewall, cron. Out of scope; the library doesn't touch them (the one exception is `install_supervisor`, because services are its job).
+- **Files the app creates at runtime.** Databases, logs, uploads, caches. They live wherever your app puts them and survive every deploy — which is normally what you want. If one lands inside an upload destination, it gets wiped: keep runtime data outside deploy directories.
+- **Services deployed by previous runs.** `deploy_supervisor_service` manages the service you hand it and nothing else. Services from earlier runs stay untouched, and stay running.
+
+### Known limitation: orphan services
+
+There is no `prune`. If you rename a service — say `myapp` becomes `myapp-web` — the new `.conf` is deployed and started, and the old `myapp` **keeps running with the old code**, from a venv you may have just rebuilt underneath it. Same if you drop a service from your script: it isn't removed, it just stops being managed.
+
+A `deploy_supervisor_services(services, prune=True)` that deleted every `.conf` not declared would be the coherent thing to do, but on a host shared with other apps it would take down services this library never deployed. Too much blast radius for now. Until then, removing a service is manual:
+
+```python
+conn.sudo("supervisorctl stop myapp")
+conn.sudo("rm /etc/supervisor/conf.d/myapp.conf")
+conn.sudo("supervisorctl update")
+```
 
 ## What it is not
 
