@@ -1,4 +1,4 @@
-# pyeasydeploy 0.1.5
+# pyeasydeploy 0.1.6
 
 [![PyPI](https://img.shields.io/pypi/v/pygrbl_streamer.svg)](https://pypi.org/project/pyeasydeploy/)
 
@@ -54,7 +54,7 @@ Connect, pick an interpreter, create the venv, install your package with its dep
 pip install pyeasydeploy
 ```
 
-Python ≥ 3.10 on your machine. On the server: SSH and some `python3` (tested on Debian/Ubuntu).
+Python ≥ 3.10 on your machine. On the server: SSH and some `python3` (tested on Arch, Debian and Ubuntu).
 
 ## Quick guide
 
@@ -120,7 +120,7 @@ Without `mode`, permissions are whatever SFTP decides, which depends on the mach
 ### Services
 
 ```python
-install_supervisor(conn)   # once per server
+install_supervisor(conn)   # once per server; Arch/Debian detected automatically
 
 deploy_supervisor_service(conn, SupervisorService(
     name="myapp",
@@ -136,7 +136,7 @@ supervisor_restart(conn, "myapp")
 supervisor_status(conn)
 ```
 
-Named fields cover the common cases; the `extra` dict accepts any supervisord option with no restrictions — the library only blocks what would corrupt the generated file.
+Named fields cover the common cases; the `extra` dict accepts any supervisord option with no restrictions — the library only blocks what would corrupt the generated file. The public API is identical on every supported distribution; package manager, systemd unit and configuration path are selected from the remote `/etc/os-release`.
 
 ## Reproducibility
 
@@ -150,7 +150,7 @@ What that covers:
 
 What it does **not** cover — real gaps, not oversights:
 
-- **System packages and OS state.** apt, users, nginx, databases, firewall, cron. Out of scope; the library doesn't touch them (the one exception is `install_supervisor`, because services are its job).
+- **System packages and OS state.** pacman/apt, users, nginx, databases, firewall, cron. Out of scope; the library doesn't touch them (the one exception is `install_supervisor`, because services are its job).
 - **Files the app creates at runtime.** Databases, logs, uploads, caches. They live wherever your app puts them and survive every deploy — which is normally what you want. If one lands inside an upload destination, it gets wiped: keep runtime data outside deploy directories.
 - **Services deployed by previous runs.** `deploy_supervisor_service` manages the service you hand it and nothing else. Services from earlier runs stay untouched, and stay running.
 
@@ -162,7 +162,8 @@ A `deploy_supervisor_services(services, prune=True)` that deleted every `.conf` 
 
 ```python
 conn.sudo("supervisorctl stop myapp")
-conn.sudo("rm /etc/supervisor/conf.d/myapp.conf")
+conn.sudo("rm /etc/supervisor/conf.d/myapp.conf")  # Debian/Ubuntu
+# conn.sudo("rm /etc/supervisor.d/myapp.ini")      # Arch
 conn.sudo("supervisorctl update")
 ```
 

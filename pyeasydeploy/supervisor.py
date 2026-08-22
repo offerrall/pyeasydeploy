@@ -1,7 +1,7 @@
-"""Supervisord service management for pyeasydeploy.
+"""Cross-distribution Supervisord service management for pyeasydeploy.
 
-Renders SupervisorService models into [program:x] config files,
-deploys them to /etc/supervisor/conf.d and controls the services.
+Renders SupervisorService models into [program:x] config files and
+deploys them using the conventions of the remote Linux distribution.
 
 Every function that touches sudo calls require_sudo first: a missing
 sudo password fails immediately with instructions instead of hanging.
@@ -9,6 +9,7 @@ sudo password fails immediately with instructions instead of hanging.
 
 import io
 import shlex
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from fabric import Connection
@@ -17,8 +18,54 @@ from .connection import require_sudo
 from .models import SupervisorService
 
 
+@dataclass(frozen=True)
+class _SupervisorPlatform:
+    install_commands: tuple[str, ...]
+    service: str
+    config_directory: str
+    config_extension: str
+
+
+_DEBIAN = _SupervisorPlatform(
+    install_commands=(
+        "apt-get update",
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y supervisor",
+    ),
+    service="supervisor.service",
+    config_directory="/etc/supervisor/conf.d",
+    config_extension=".conf",
+)
+
+_ARCH = _SupervisorPlatform(
+    install_commands=("pacman -S --needed --noconfirm supervisor",),
+    service="supervisord.service",
+    config_directory="/etc/supervisor.d",
+    config_extension=".ini",
+)
+
+
+def _supervisor_platform(conn: Connection) -> _SupervisorPlatform:
+    result = conn.run("cat /etc/os-release", hide=True)
+    release = {}
+    for line in result.stdout.splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            release[key] = value.strip().strip('"\'')
+
+    distribution = release.get("ID", "").lower()
+    family = release.get("ID_LIKE", "").lower().split()
+    if distribution == "arch" or "arch" in family:
+        return _ARCH
+    if distribution in {"debian", "ubuntu"} or "debian" in family:
+        return _DEBIAN
+    raise RuntimeError(
+        "Unsupported remote Linux distribution for Supervisor: "
+        f"{distribution or 'unknown'}"
+    )
+
+
 def install_supervisor(conn: Connection, verbose: bool = True) -> None:
-    """Install supervisord via apt and enable it (Debian/Ubuntu).
+    """Install and enable supervisord on Arch or Debian-based Linux.
 
     Idempotent: safe to run on a host that already has it.
 
@@ -31,13 +78,13 @@ def install_supervisor(conn: Connection, verbose: bool = True) -> None:
             connect_to_host).
     """
     require_sudo(conn, "install_supervisor")
+    platform = _supervisor_platform(conn)
     if verbose:
         print("Installing supervisor...")
-    conn.sudo("apt-get update", hide=not verbose, warn=True)
-    conn.sudo("DEBIAN_FRONTEND=noninteractive apt-get install -y supervisor",
-              hide=not verbose)
-    conn.sudo("systemctl enable supervisor", hide=True)
-    conn.sudo("systemctl start supervisor", hide=True)
+    for command in platform.install_commands:
+        conn.sudo(command, hide=not verbose)
+    conn.sudo(f"systemctl enable {platform.service}", hide=True)
+    conn.sudo(f"systemctl start {platform.service}", hide=True)
     if verbose:
         print("Supervisor installed and started")
 
@@ -94,7 +141,7 @@ def create_supervisor_config(service: SupervisorService) -> str:
 def deploy_supervisor_service(
     conn: Connection, service: SupervisorService, verbose: bool = True
 ) -> None:
-    """Deploy a service config to /etc/supervisor/conf.d and load it.
+    """Deploy a service config using the remote distribution's layout.
 
     The config is rendered in memory and uploaded directly (no local
     temp file: nothing touches your working directory, concurrent
@@ -115,6 +162,7 @@ def deploy_supervisor_service(
             connect_to_host).
     """
     require_sudo(conn, "deploy_supervisor_service")
+    platform = _supervisor_platform(conn)
     config_content = create_supervisor_config(service)
 
     # Unique remote temp file, then a sudo mv into place: conf.d is
@@ -128,10 +176,13 @@ def deploy_supervisor_service(
             print(f"Uploading config for [program:{service.name}]")
         conn.put(io.StringIO(config_content), temp_remote)
 
-        remote_config = f"/etc/supervisor/conf.d/{service.name}.conf"
+        remote_config = (
+            f"{platform.config_directory}/{service.name}"
+            f"{platform.config_extension}"
+        )
         if verbose:
             print(f"Moving config to {remote_config}")
-        conn.sudo("mkdir -p /etc/supervisor/conf.d", hide=True)
+        conn.sudo(f"mkdir -p {platform.config_directory}", hide=True)
         conn.sudo(f"mv {shlex.quote(temp_remote)} {shlex.quote(remote_config)}",
                   hide=True)
         # mktemp creates mode 600 owned by the SSH user; make it
