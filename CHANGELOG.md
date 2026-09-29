@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2
+
+### Added
+
+- The `LICENSE` file with the MIT text that `pyproject.toml` declares, shipped in
+  the package. The code is the same as 1.0.1.
+
 ## 1.0.1
 
 ### Changed
