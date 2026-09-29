@@ -8,7 +8,7 @@ dynamic = ["version"]
 authors = [
     {name = "Beltrán Offerrall"}
 ]
-description = "Simple and replicable Python server deployment toolkit"
+description = "Deploy Python apps to Linux servers over SSH, with plain functions on top of Fabric."
 readme = "README.md"
 requires-python = ">=3.11"
 keywords = ["deployment", "devops", "automation", "ssh", "fabric", "supervisor"]
@@ -36,6 +36,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/offerrall/pyeasydeploy"
+Documentation = "https://offerrall.github.io/pyeasydeploy/"
 Repository = "https://github.com/offerrall/pyeasydeploy"
 Issues = "https://github.com/offerrall/pyeasydeploy/issues"
 

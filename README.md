@@ -1,12 +1,8 @@
 # pyeasydeploy
 
-[![PyPI](https://img.shields.io/pypi/v/pyeasydeploy.svg)](https://pypi.org/project/pyeasydeploy/)
+Deploy Python apps to Linux servers over SSH, with plain Python functions on top of [Fabric](https://www.fabfile.org/): no agents on the server, no YAML, no DSL to learn. Your deploy is a `deploy.py` in your project that reads top to bottom.
 
-A small library for deploying Python applications to Linux servers over SSH. Plain Python functions on top of [Fabric](https://www.fabfile.org/): no agents on the server, no YAML, no DSL to learn. Your deploy script reads top to bottom.
-
-It doesn't try to compete with Ansible or Docker. If you have a few servers, you write Python, and you want your deploy to be just another `deploy.py` in your project, it might be for you.
-
-## A complete deploy
+It is made for a few servers and a team that writes Python, not to compete with Ansible or Docker.
 
 ```python
 from pyeasydeploy import (
@@ -38,24 +34,16 @@ deploy_supervisor_service(conn, SupervisorService(
 supervisor_restart(conn, APP)
 ```
 
-Connect, pick an interpreter, create the venv, install your package with its dependencies, and leave it running as a supervised service that survives reboots. The `venv` object returned by `create_venv` carries its own path: the service command is built from it, no paths repeated by hand.
-
-## Installation
-
-```bash
-pip install pyeasydeploy
-```
-
-Python ≥ 3.11 on your machine. On the server: SSH and some `python3` (tested on Arch, Debian and Ubuntu).
+The full documentation is at https://offerrall.github.io/pyeasydeploy/.
 
 ## Documentation
 
+- [Overview](docs/overview.md): what a deploy does step by step, and what the server needs.
 - [Guide](docs/guide.md): connecting, remote Python, venvs and packages, files and services.
-- [Reproducibility](docs/reproducibility.md): what a deploy guarantees, and what it does not.
+- [Reference](docs/reference.md): every public name, its arguments and what it does.
+- [Reproducibility](docs/reproducibility.md): what a deploy guarantees, what it does not, and orphan services.
 - [Design](docs/design.md): the ideas behind it, and what it is not.
-- [Changelog](CHANGELOG.md)
-- [Releasing](RELEASING.md)
 
-## License
+### Maintaining
 
-MIT
+- [Releasing](docs/releasing.md): the release workflow and the one-time PyPI setup.

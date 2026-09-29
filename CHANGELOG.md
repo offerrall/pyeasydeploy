@@ -1,13 +1,32 @@
 # Changelog
 
-## 1.0.2
+## 1.0.3 - 2026-09-29
+
+### Changed
+
+- Documentation only. The README becomes a short entrance to the documentation site,
+  https://offerrall.github.io/pyeasydeploy/, and `docs/overview.md` holds the
+  introduction: what each step of a deploy does, and what the server needs.
+- A new `docs/reference.md` lists every public name. `get_python_instances`,
+  `delete_venv`, `install_package_from_github`, `supervisor_start`, `supervisor_stop`,
+  `has_sudo_password`, `require_sudo`, `check_supervisor_installed` and
+  `create_supervisor_config` were documented nowhere; the guide's examples import what
+  they use.
+- `RELEASING.md` moves to `docs/releasing.md`. The "Changed in 0.1.5" note leaves the
+  guide for its 0.1.5 entry here, and the changelog headings carry their release dates.
+- `pyproject.toml`: the description matches the package docstring, and
+  `[project.urls]` gains `Documentation`.
+
+The code is the same as 1.0.2.
+
+## 1.0.2 - 2026-09-29
 
 ### Added
 
 - The `LICENSE` file with the MIT text that `pyproject.toml` declares, shipped in
   the package. The code is the same as 1.0.1.
 
-## 1.0.1
+## 1.0.1 - 2026-09-29
 
 ### Changed
 
@@ -15,9 +34,9 @@
   `==1.2.1`, instead of `>=1.2`: a new pytypehint can no longer change what an
   installed pyeasydeploy does. The code is the same as 1.0.0.
 
-## 1.0.0
+## 1.0.0 - 2026-09-29
 
-The models are rebuilt on [pytypehint](https://github.com/offerrall/pytypehint): deeply
+The models are rebuilt on [pytypehint](https://offerrall.github.io/pytypehint/): deeply
 immutable, keyword-only, and validated from their types when built. What reaches the
 server (commands, files, their order) is the same as in 0.1.6.
 
@@ -44,3 +63,10 @@ server (commands, files, their order) is the same as in 0.1.6.
 
 - Tests, and releases published to PyPI from GitHub releases.
 - The documentation split into `docs/`.
+
+## 0.1.5 - 2026-08-04
+
+### Changed
+
+- `create_venv` deletes an existing environment and builds a new one. Pass
+  `recreate=False` to reuse it.

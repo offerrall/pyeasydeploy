@@ -14,6 +14,4 @@
 - **Not provisioning.** It installs supervisor because services are its job, and that's where it stops: nginx, databases and the rest of your server are up to you.
 - **No secret management.** The passwords you pass in are your environment's responsibility.
 - **No fleet orchestration.** One connection, one server. For several, write a loop.
-- **Linux targets only.** The source machine can be Windows, macOS or Linux.
-
-For many of those cases, bigger tools will do it better. This one exists for when you don't need them.
+- **Linux targets only.** The machine you deploy from can be Windows, macOS or Linux.

@@ -6,7 +6,7 @@ What that covers:
 
 - **Uploads.** `upload_file` and `upload_directory` remove the destination first. The remote tree is exactly your local tree minus the ignored patterns. Add `mode=` and the permissions stop depending on the machine you deploy from too.
 - **Venvs.** `create_venv` wipes and rebuilds by default. Packages you stopped declaring disappear, pinned versions really apply, and changing the target Python version actually changes the interpreter — none of which happens in a reused venv.
-- **Services.** The `.conf` for a deployed service is rewritten from the `SupervisorService` model every time. What you declare is what supervisord reads.
+- **Services.** The configuration file of a deployed service is rewritten from the `SupervisorService` model every time. What you declare is what supervisord reads.
 
 What it does **not** cover — real gaps, not oversights:
 
@@ -14,11 +14,11 @@ What it does **not** cover — real gaps, not oversights:
 - **Files the app creates at runtime.** Databases, logs, uploads, caches. They live wherever your app puts them and survive every deploy — which is normally what you want. If one lands inside an upload destination, it gets wiped: keep runtime data outside deploy directories.
 - **Services deployed by previous runs.** `deploy_supervisor_service` manages the service you hand it and nothing else. Services from earlier runs stay untouched, and stay running.
 
-## Known limitation: orphan services
+## Limitation: orphan services
 
-There is no `prune`. If you rename a service — say `myapp` becomes `myapp-web` — the new `.conf` is deployed and started, and the old `myapp` **keeps running with the old code**, from a venv you may have just rebuilt underneath it. Same if you drop a service from your script: it isn't removed, it just stops being managed.
+There is no `prune`. If you rename a service — say `myapp` becomes `myapp-web` — the new configuration is deployed and started, and the old `myapp` **keeps running with the old code**, from a venv you may have just rebuilt underneath it. Same if you drop a service from your script: it isn't removed, it just stops being managed.
 
-A `deploy_supervisor_services(services, prune=True)` that deleted every `.conf` not declared would be the coherent thing to do, but on a host shared with other apps it would take down services this library never deployed. Too much blast radius for now. Until then, removing a service is manual:
+A prune that deleted every configuration not declared in your script would, on a host shared with other apps, take down services this library never deployed. So removing a service is manual:
 
 ```python
 conn.sudo("supervisorctl stop myapp")
