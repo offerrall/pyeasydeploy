@@ -1,16 +1,5 @@
-"""File and directory upload for pyeasydeploy.
-
-Uploads local files/trees to the remote host over SFTP, with ignore
-patterns.
-
-PHILOSOPHY — DESTRUCTIVE, ALWAYS: the remote destination is removed
-before uploading, every time. What ends up on the server is exactly
-what you have locally — no drift, no orphan files from previous
-deploys, no merge semantics. The only protection is structural: a
-short deny-list of system roots that can never be a deploy
-destination (a typo there would be catastrophic and is never
-legitimate).
-"""
+"""Uploads over SFTP. Destructive, always: the destination is removed first, so the server
+ends up with exactly the local files, with nothing left over from earlier deploys."""
 
 import fnmatch
 import os
@@ -25,47 +14,27 @@ DEFAULT_IGNORE: List[str] = [
     ".pytest_cache", ".mypy_cache", ".ruff_cache",
     "*.pyc", "*.pyo", "*.db", "*.sqlite", "*.sqlite3", ".DS_Store",
 ]
-"""Glob patterns excluded from upload_directory by default."""
+"""Name patterns upload_directory skips by default."""
 
-# Destinations that are never legitimate deploy targets. Removing them
-# would destroy the system; a path matching this list is always a typo.
-_FORBIDDEN_DESTINATIONS = frozenset(
-    {"/", "/bin", "/boot", "/dev", "/etc", "/home", "/lib", "/opt",
-     "/proc", "/root", "/run", "/sbin", "/srv", "/sys", "/tmp",
-     "/usr", "/var"}
-)
+# Never a legitimate destination: removing one would destroy the system.
+_FORBIDDEN_DESTINATIONS = frozenset({
+    "/", "/bin", "/boot", "/dev", "/etc", "/home", "/lib", "/opt", "/proc",
+    "/root", "/run", "/sbin", "/srv", "/sys", "/tmp", "/usr", "/var",
+})
 
 
 def check_destination(remote_path: str) -> str:
-    """Reject remote paths that would wipe a system root.
+    """The normalized remote_path, or ValueError if removing it would wipe a system root.
 
-    Shared by every destructive operation in the library (uploads here,
-    venv creation/deletion in venv.py): all of them start with an
-    'rm -rf' on the path, so a typo like "/" or "/home" must fail
-    before any remote command runs.
-
-    Args:
-        remote_path: Absolute remote path about to be removed.
-
-    Returns:
-        The normalized path (redundant separators and "." collapsed).
-
-    Raises:
-        TypeError: If remote_path is not a str.
-        ValueError: If remote_path is empty, not absolute, or is (or
-            normalizes to) a protected system root.
+    Every destructive operation starts with an `rm -rf` on its path, so each calls this first.
     """
     if not isinstance(remote_path, str):
-        raise TypeError(
-            f"remote path must be str, got {type(remote_path).__name__}"
-        )
+        raise TypeError(f"remote path must be str, got {type(remote_path).__name__}")
     if not remote_path.strip():
         raise ValueError("remote path must be a non-empty string")
     normalized = str(PurePosixPath(remote_path))
     if not normalized.startswith("/"):
-        raise ValueError(
-            f"remote path must be absolute, got {remote_path!r}"
-        )
+        raise ValueError(f"remote path must be absolute, got {remote_path!r}")
     if normalized in _FORBIDDEN_DESTINATIONS:
         raise ValueError(
             f"Refusing {remote_path!r} as destination: it is a system "
@@ -76,8 +45,7 @@ def check_destination(remote_path: str) -> str:
 
 
 def _check_mode(mode: int) -> int:
-    """Require a valid POSIX permission bitmask. Returns the value."""
-    # bool is an int subclass: True would silently become mode 1.
+    # bool is an int: True would silently become mode 1.
     if not isinstance(mode, int) or isinstance(mode, bool):
         raise TypeError(f"mode must be int, got {type(mode).__name__}")
     if not 0 <= mode <= 0o7777:
@@ -95,27 +63,9 @@ def upload_file(
     verbose: bool = True,
     mode: Optional[int] = None,
 ) -> None:
-    """Upload a single file to the remote host.
+    """Upload one file, replacing whatever is at remote_file and creating its parents.
 
-    DESTRUCTIVE: any existing file (or directory) at remote_file is
-    removed first. Parent directories are created as needed.
-
-    Args:
-        conn: Connection to the remote host.
-        local_file: Path to the local file.
-        remote_file: Absolute remote destination path.
-        verbose: Print progress to stdout.
-        mode: POSIX permissions to apply after upload, as an octal int
-            (e.g. 0o644, 0o755). None leaves whatever SFTP decides,
-            which depends on the source machine — pass a mode when you
-            need the result to be the same from every machine.
-
-    Raises:
-        TypeError / ValueError: If remote_file is not an absolute path
-            or is a protected system root, or mode is not a valid
-            permission bitmask.
-        FileNotFoundError: If local_file does not exist or is not a
-            file.
+    Without mode (e.g. 0o600), permissions depend on the machine you deploy from.
     """
     remote_file = check_destination(remote_file)
     if mode is not None:
@@ -125,9 +75,7 @@ def upload_file(
         raise FileNotFoundError(f"Local file not found: {local_file}")
 
     conn.run(f"rm -rf {shlex.quote(remote_file)}", hide=True, warn=True)
-
-    remote_dir = str(PurePosixPath(remote_file).parent)
-    conn.run(f"mkdir -p {shlex.quote(remote_dir)}", hide=True)
+    conn.run(f"mkdir -p {shlex.quote(str(PurePosixPath(remote_file).parent))}", hide=True)
 
     if verbose:
         print(f"Uploading {local_file} to {remote_file}")
@@ -146,32 +94,10 @@ def upload_directory(
     verbose: bool = True,
     mode: Optional[int] = None,
 ) -> None:
-    """Upload a local directory tree to the remote host.
+    """Replace remote_dir with a copy of local_dir.
 
-    DESTRUCTIVE: the existing remote_dir is removed entirely first.
-    After this call, the remote tree is exactly the local tree (minus
-    ignored patterns) — no drift, no leftovers from previous deploys.
-
-    Args:
-        conn: Connection to the remote host.
-        local_dir: Path to the local directory.
-        remote_dir: Absolute remote destination path.
-        ignore: Glob patterns to exclude (matched against file and
-            directory names, not paths). None uses DEFAULT_IGNORE;
-            pass [] to upload everything.
-        verbose: Print progress to stdout.
-        mode: POSIX permissions to apply to every uploaded FILE in the
-            tree, as an octal int (e.g. 0o644). Directories keep the
-            remote umask. None leaves whatever SFTP decides, which
-            depends on the source machine — pass a mode when you need
-            the result to be the same from every machine.
-
-    Raises:
-        TypeError / ValueError: If remote_dir is not an absolute path
-            or is a protected system root, or mode is not a valid
-            permission bitmask.
-        FileNotFoundError: If local_dir does not exist or is not a
-            directory.
+    ignore holds name patterns (not paths); None means DEFAULT_IGNORE, [] uploads
+    everything. mode applies to every file; directories keep the remote umask.
     """
     remote_dir = check_destination(remote_dir)
     if mode is not None:
@@ -188,39 +114,26 @@ def upload_directory(
         print(f"Uploading {local_dir} to {remote_dir}")
 
     for root, dirs, files in os.walk(local_dir):
-        dirs[:] = [
-            d for d in dirs
-            if not any(fnmatch.fnmatch(d, pat) for pat in patterns)
-        ]
+        dirs[:] = [d for d in dirs if not any(fnmatch.fnmatch(d, pat) for pat in patterns)]
 
         relative_root = Path(root).relative_to(local_path)
-        # PurePosixPath join: correct remote separators even from Windows.
+        # PurePosixPath: remote separators stay "/" when deploying from Windows.
         remote_root = str(PurePosixPath(remote_dir) / PurePosixPath(*relative_root.parts))
 
-        # One mkdir -p per tree level: fewer SSH round-trips than one
-        # call per directory.
+        # One mkdir per level of the tree, not per directory: fewer SSH round trips.
         to_create = [str(PurePosixPath(remote_root) / d) for d in dirs]
         if relative_root == Path("."):
-            to_create.append(remote_root)  # ensure the root itself exists
+            to_create.append(remote_root)
         if to_create:
-            quoted = " ".join(shlex.quote(p) for p in to_create)
-            conn.run(f"mkdir -p {quoted}", hide=True)
+            conn.run(f"mkdir -p {' '.join(shlex.quote(p) for p in to_create)}", hide=True)
 
         for file_name in files:
             if any(fnmatch.fnmatch(file_name, pat) for pat in patterns):
                 continue
-            local_file = Path(root) / file_name
-            remote_file = str(PurePosixPath(remote_root) / file_name)
-            conn.put(str(local_file), remote_file)
+            conn.put(str(Path(root) / file_name), str(PurePosixPath(remote_root) / file_name))
 
     if mode is not None:
-        # One find for the whole tree: chmod per file would be one SSH
-        # round-trip per file.
-        conn.run(
-            f"find {shlex.quote(remote_dir)} -type f "
-            f"-exec chmod {mode:o} {{}} +",
-            hide=True,
-        )
+        conn.run(f"find {shlex.quote(remote_dir)} -type f -exec chmod {mode:o} {{}} +", hide=True)
 
     if verbose:
         print("Upload complete")
