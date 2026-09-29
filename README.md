@@ -38,12 +38,12 @@ The full documentation is at https://offerrall.github.io/pyeasydeploy/.
 
 ## Documentation
 
-- [Overview](docs/overview.md): what a deploy does step by step, and what the server needs.
-- [Guide](docs/guide.md): connecting, remote Python, venvs and packages, files and services.
-- [Reference](docs/reference.md): every public name, its arguments and what it does.
-- [Reproducibility](docs/reproducibility.md): what a deploy guarantees, what it does not, and orphan services.
-- [Design](docs/design.md): the ideas behind it, and what it is not.
+- [Overview](https://offerrall.github.io/pyeasydeploy/): what a deploy does step by step, and what the server needs.
+- [Guide](https://offerrall.github.io/pyeasydeploy/guide/): connecting, remote Python, venvs and packages, files and services.
+- [Reference](https://offerrall.github.io/pyeasydeploy/reference/): every public name, its arguments and what it does.
+- [Reproducibility](https://offerrall.github.io/pyeasydeploy/reproducibility/): what a deploy guarantees, what it does not, and orphan services.
+- [Design](https://offerrall.github.io/pyeasydeploy/design/): the ideas behind it, and what it is not.
 
 ### Maintaining
 
-- [Releasing](docs/releasing.md): the release workflow and the one-time PyPI setup.
+- [Releasing](https://offerrall.github.io/pyeasydeploy/releasing/): the release workflow and the one-time PyPI setup.
