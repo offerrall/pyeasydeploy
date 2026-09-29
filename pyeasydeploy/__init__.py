@@ -1,6 +1,6 @@
 """Deploy Python apps to Linux servers over SSH, with plain functions on top of Fabric."""
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 from .models import Host, Key, Option, Password, PythonInstance, SupervisorService, Venv
 from .connection import connect, has_sudo_password, require_sudo

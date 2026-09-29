@@ -31,7 +31,7 @@ classifiers = [
 
 dependencies = [
     "fabric>=3.0.0",
-    "pytypehint>=1.2",
+    "pytypehint==1.2.1",
 ]
 
 [project.urls]

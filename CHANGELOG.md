@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1
+
+### Changed
+
+- `pytypehint` is pinned to the exact version this release is tested with,
+  `==1.2.1`, instead of `>=1.2`: a new pytypehint can no longer change what an
+  installed pyeasydeploy does. The code is the same as 1.0.0.
+
 ## 1.0.0
 
 The models are rebuilt on [pytypehint](https://github.com/offerrall/pytypehint): deeply
