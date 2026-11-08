@@ -1,60 +1,16 @@
-"""Deploy Python apps to Linux servers over SSH, with plain functions on top of Fabric."""
+__version__ = "2.0.0"
 
-__version__ = "1.0.4"
-
-from .models import Host, Key, Option, Password, PythonInstance, SupervisorService, Venv
-from .connection import connect, has_sudo_password, require_sudo
-from .python import get_any_python_instance, get_python_instances, get_target_python_instance
-from .venv import create_venv, delete_venv, run_in_venv
-from .transfer import DEFAULT_IGNORE, upload_directory, upload_file
-from .packages import (
-    install_local_package,
-    install_package_from_github,
-    install_package_from_private_github,
-    install_packages,
-)
-from .supervisor import (
-    check_supervisor_installed,
-    create_supervisor_config,
-    deploy_supervisor_service,
-    install_supervisor,
-    supervisor_restart,
-    supervisor_start,
-    supervisor_status,
-    supervisor_stop,
-)
+from .models import App, Key, Password, Python, Release, Server, Uv
+from .connection import fabric_connection
+from .server import pyeasydeploy_dir, server_arch
+from .uv import ensure_uv
+from .python import ensure_python
+from .app import app_logs, app_status, deploy_app, restart_app, stop_app
 
 __all__ = [
     "__version__",
-    "Host",
-    "Password",
-    "Key",
-    "PythonInstance",
-    "Venv",
-    "SupervisorService",
-    "Option",
-    "connect",
-    "has_sudo_password",
-    "require_sudo",
-    "get_python_instances",
-    "get_target_python_instance",
-    "get_any_python_instance",
-    "create_venv",
-    "delete_venv",
-    "run_in_venv",
-    "upload_file",
-    "upload_directory",
-    "DEFAULT_IGNORE",
-    "install_packages",
-    "install_local_package",
-    "install_package_from_github",
-    "install_package_from_private_github",
-    "install_supervisor",
-    "check_supervisor_installed",
-    "create_supervisor_config",
-    "deploy_supervisor_service",
-    "supervisor_start",
-    "supervisor_stop",
-    "supervisor_restart",
-    "supervisor_status",
+    "Server", "Password", "Key", "Uv", "Python", "App", "Release",
+    "fabric_connection", "pyeasydeploy_dir", "server_arch",
+    "ensure_uv", "ensure_python",
+    "deploy_app", "app_status", "app_logs", "restart_app", "stop_app",
 ]

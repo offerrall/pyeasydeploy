@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.0.0 - 2026-11-08
+
+A new library under the same name. The server only needs SSH and systemd: the deploy
+brings uv, Python and the app, with no sudo and no system packages, the same on any
+distribution. Everything lives in `~/.pyeasydeploy` on the server.
+
+### Changed (breaking)
+
+- `connect(Host(...))` is gone. Functions take an immutable `Server` (`address`, `user`,
+  `auth`, `port`) and the library keeps one SSH connection per `Server` inside.
+  `fabric_connection(server)` returns it, for anything the library does not do.
+  `sudo_password` is gone: nothing needs sudo.
+- The interpreter comes from uv, not from `/usr/bin`: `ensure_uv(server)` uploads the
+  latest uv (or the one at `url`), and `ensure_python(uv, "3.13")` installs Python with it.
+  `get_python_instances`, `get_target_python_instance`, `get_any_python_instance` and
+  `PythonInstance` are gone.
+- Apps are deployed from their `uv.lock` with `deploy_app(python, App(...))`: each deploy is
+  a new release with its own venv, `current` points at it, and the two newest are kept.
+  Its `environment` sets the app's variables. With `package`, only what `uv.lock` points
+  to in the workspace is uploaded. A command that cannot start makes the deploy fail.
+  `create_venv`, `delete_venv`, `run_in_venv`, the four `install_*` functions,
+  `upload_file`, `upload_directory` and `DEFAULT_IGNORE` are gone.
+- Apps run as systemd user services instead of supervisord, and their output goes to the
+  systemd journal: `app_status`, `app_logs`, `restart_app` and `stop_app`. Enabling
+  lingering once, as root, is the only setup. `SupervisorService`, `Option` and the
+  `supervisor_*` functions are gone.
+- `pytypehint` is pinned to `==1.2.3`.
+
+### Fixed
+
+- Removals can no longer escape their folder: every path is normalized and must be
+  strictly inside `~/.pyeasydeploy`, where 1.x checked a list of system roots that
+  `/usr/../etc` or a home directory got past.
+- The key path of a `Key` expands `~`.
+
+### Added
+
+- `examples/`: a small HTTP app with its `uv.lock`, and the `deploy.py` that deploys it.
+
 ## 1.0.4 - 2026-09-29
 
 ### Changed

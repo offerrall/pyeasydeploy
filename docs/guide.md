@@ -1,95 +1,74 @@
 # Guide
 
-Every name used here is imported from `pyeasydeploy`. `conn`, `py` and `venv` are the values created in the sections before. The [Reference](reference.md) lists every public name.
+Every name used here is imported from `pyeasydeploy`. `server`, `uv` and `python` are the values created in the sections before. The [Reference](reference.md) lists every public name.
 
-## Connecting
-
-```python
-from pyeasydeploy import Host, Key, Password, connect
-
-conn = connect(Host(address="203.0.113.10", user="deploy", auth=Password(value="...")))          # reused for sudo
-conn = connect(Host(address="203.0.113.10", user="deploy", auth=Key(path="~/.ssh/id_ed25519")))  # SSH key
-conn = connect(Host(address="203.0.113.10", user="deploy", auth=Key(path="..."), sudo_password="...", port=2222))
-```
-
-`auth` is either a `Password` or a `Key`, so a host always has exactly one. With a key and sudo operations, add `sudo_password`. Functions that need sudo check for a password first and raise `PermissionError` at once, instead of hanging while sudo waits for one. The connection is lazy: a wrong password shows up on the first command, not at connect time.
-
-All models are immutable, take keyword arguments and validate themselves when built: a relative path, a port out of range or a blank name fails on your machine, before anything reaches the server.
-
-## Remote Python
+## Servers
 
 ```python
-py = get_any_python_instance(conn)             # newest on the server
-py = get_target_python_instance(conn, "3.11")  # a specific one
-found = get_python_instances(conn)             # all of them, newest first
+from pyeasydeploy import Key, Password, Server
+
+server = Server(address="203.0.113.10", user="deploy", auth=Key(path="~/.ssh/id_ed25519"))
+server = Server(address="203.0.113.10", user="deploy", auth=Password(value="..."), port=2222)
 ```
 
-Interpreters are looked up in `/usr/bin`. Only real interpreters are matched (`python3.X-config` and friends are filtered out), and version matching is component-wise: `"3.1"` means 3.1, not 3.11. For non-standard locations, build the model yourself:
+`auth` is either a `Password` or a `Key`, so a server always has exactly one. A `Server` is only a value: building it connects to nothing. The first function that needs the server opens an SSH connection, and every later call with an equal `Server` reuses it.
+
+All models are immutable, take keyword arguments and validate themselves when built: a relative path, a port out of range or an app name with a space fails on your machine, before anything reaches the server. To change one, build another with `dataclasses.replace`.
+
+## uv and Python
 
 ```python
-py = PythonInstance(version="3.12", executable="/opt/py312/bin/python3.12")
+uv = ensure_uv(server)                          # the latest uv release
+uv = ensure_uv(server, url="https://example.com/my-uv.tar.gz")
+uv = ensure_uv(server, url="file:///home/me/uv-x86_64-unknown-linux-musl.tar.gz")
+
+python = ensure_python(uv, "3.13")              # the latest 3.13.x
+python = ensure_python(uv, "3.13.9")            # exactly 3.13.9
 ```
 
-## Venvs and packages
+`ensure_uv` uploads uv only when the server does not have the latest release. With `url`, it uses that `.tar.gz` as it is, whatever processor the server has: the archive must hold a file named `uv`, and it is uploaded only when it differs from the one on the server. `file://` URLs work, for a uv on your own disk.
+
+`ensure_python` installs with uv into `~/.pyeasydeploy/python/`. A version like `"3.13"` gets the newest patch release the server's uv knows, upgrading an older one on every deploy; a full version like `"3.13.9"` stays fixed. The returned `Python` holds the exact version installed.
+
+## Apps
 
 ```python
-venv = create_venv(conn, py, "/home/deploy/venvs/myapp")  # wiped and rebuilt
+from pyeasydeploy import App, deploy_app
 
-install_packages(conn, venv, ["fastapi", "uvicorn[standard]"])
-install_local_package(conn, venv, "./myapp")
-install_package_from_github(conn, venv, "https://github.com/org/public.git")
-install_package_from_private_github(conn, venv, "git@github.com:org/private.git", branch="main")
-
-run_in_venv(conn, venv, "python -m myapp --check")
-delete_venv(conn, venv)
+release = deploy_app(python, App(name="web", source="./web", command="python -m web"))
+release = deploy_app(python, App(name="web", source="./web", command="web --port 8000"))
+release = deploy_app(python, App(name="web", source=".", command="web", package="web"))
+release = deploy_app(python, App(name="web", source="./web", command="web",
+                                 environment=(("NTFY_TOPIC", "shop"), ("PORT", "8000"))))
 ```
 
-`create_venv` deletes an existing environment at that path and builds a new one. Pass `recreate=False` to reuse it:
+`source` is the folder on your machine with the project's `pyproject.toml` and `uv.lock`. It is uploaded without `.git`, virtual environments, caches, `*.pyc` or local databases (`*.db`, `*.sqlite`, `*.sqlite3`). `package` selects one member of a uv workspace: `source` is then the workspace root, where `uv.lock` lives. With `package`, only what `uv.lock` points to is uploaded: the root's `pyproject.toml` and `uv.lock`, and the folders of its local packages. Everything else in the root, such as data or other projects, stays on your machine. A lock that points outside `source` is refused. Without `package`, the whole folder is the app, packaged or not: `command="python main.py"` works for a project with no build system.
+
+`environment` holds the app's environment variables, as `(name, value)` pairs. They are written into the service's file, which only your user can read.
+
+`command` runs from the release's virtual environment, in the release's folder: its first word is a program in the venv's `bin/` (`python`, or a script your project declares), and the rest are its arguments. The service restarts it whenever it exits.
+
+`deploy_app` installs the new release while the old one keeps running, switches `current` to it and restarts the service. If the install fails, the new release is removed and the app keeps running the old one. If the command cannot be started, for example because the program does not exist in the venv, `deploy_app` raises instead of returning; a program that starts and then crashes shows up in `app_status` and `app_logs`. The two newest releases are kept, so the previous one is still on disk.
+
+## Logs and control
 
 ```python
-venv = create_venv(conn, py, "/home/deploy/venvs/myapp", recreate=False)
-install_local_package(conn, venv, "./myapp", force=True)   # see below
+from pyeasydeploy import app_logs, app_status, restart_app, stop_app
+
+print(app_status(server, "web"))
+print(app_logs(server, "web", lines=50))
+restart_app(server, "web")
+stop_app(server, "web")
 ```
 
-Reuse is for development, when reinstalling a large environment on every run is expensive. It comes with a catch: pip compares **versions, not commits**, so new code shipped under the same version number is silently ignored and the server keeps running the old one. `force=True` (available on all four `install_*` functions) passes `--force-reinstall` and fixes it. With the default `recreate=True` you don't need it.
+Everything the app prints, output and errors alike, goes to the systemd journal in order, as in a terminal. The journal rotates and limits it on its own: there are no log files to manage. For the journal to survive a reboot it must be kept on disk, which is the default on most distributions.
 
-Installs use `uv` inside the venv (fast; `use_uv=False` for classic pip). `install_local_package` needs a `pyproject.toml` or `setup.py` at the package root; it uploads to a temporary directory on the server and removes it afterwards, even if the install fails. `install_package_from_github` has the server clone the repository itself. `install_package_from_private_github` clones **on your machine** with your own credentials, then uploads the source: the server never needs access to your GitHub. `run_in_venv` runs a shell command with the venv's `bin/` first in `PATH`, as `activate` would; quoting inside the command is up to you.
-
-## Files
+## The escape hatch
 
 ```python
-upload_directory(conn, "./data", "/home/deploy/data")
-upload_file(conn, "config.toml", "/home/deploy/myapp/config.toml")
+from pyeasydeploy import fabric_connection
 
-upload_directory(conn, "./data", "/home/deploy/data", mode=0o644)      # every file
-upload_file(conn, "secrets.env", "/home/deploy/myapp/.env", mode=0o600)
+fabric_connection(server).run("df -h")
 ```
 
-Uploads are destructive: the destination is removed before copying (see [Reproducibility](reproducibility.md)), and system roots such as `/`, `/home` or `/etc` are rejected as destinations. `upload_file` creates missing parent directories. `.git`, `__pycache__`, venvs and similar are excluded by default (`DEFAULT_IGNORE`); `ignore` takes name patterns, not paths, and `ignore=[]` uploads everything.
-
-Without `mode`, permissions are whatever SFTP decides, which depends on the machine you deploy from: pass it when two people deploying the same project must get the same result. In `upload_directory` it applies to every file in the tree; directories keep the remote umask.
-
-## Services
-
-```python
-install_supervisor(conn)   # once per server; Arch/Debian detected automatically
-
-deploy_supervisor_service(conn, SupervisorService(
-    name="myapp",
-    command=f"{venv.path}/bin/python -m myapp",
-    extra=(
-        Option(key="stdout_logfile_maxbytes", value="10MB"),   # any supervisord option,
-        Option(key="stdout_logfile_backups", value=5),         # written in this order
-        Option(key="stopsignal", value="INT"),
-    ),
-))
-supervisor_restart(conn, "myapp")
-
-supervisor_start(conn, "myapp")
-supervisor_stop(conn, "myapp")
-supervisor_status(conn)            # every service; pass a name for one
-```
-
-`deploy_supervisor_service` writes the service's configuration, replacing any with the same name, and reloads supervisord: the service starts if `autostart` is set, and a running service whose configuration changed is restarted. `install_supervisor` installs, enables and starts supervisord, and is safe to run again.
-
-Named fields cover the common cases; fields set to `None` are left out of the file, so supervisord's defaults apply. `extra` accepts any other supervisord option with no restrictions: the library only blocks what would corrupt the generated file, a key that repeats a named field, or the same key twice. The public API is identical on every supported distribution; package manager, systemd unit and configuration path are selected from the remote `/etc/os-release`.
+`fabric_connection` returns the [Fabric](https://www.fabfile.org/) connection the library uses for that server, for anything the library does not do. What you run there is up to you: the library's limits, such as staying inside `~/.pyeasydeploy`, do not apply.

@@ -2,23 +2,34 @@
 
 ## What a deploy does
 
-The introductory example is a complete deploy. Each call is one step, run over SSH in order:
+The introductory example is a complete deploy. Each call is one step, run over SSH in order, and each returns the value the next one takes:
 
-1. `connect` opens a connection to the `Host`: its address, user, and either a `Password` or a `Key`. Operations that need sudo use `sudo_password`, or the SSH password when `auth` is a `Password`. The connection is lazy: a wrong password shows up on the first command.
-2. `get_target_python_instance` picks an interpreter already installed on the server: the newest one whose version matches `"3.11"`.
-3. `create_venv` builds a virtual environment with that interpreter, removing any previous one at the same path.
-4. `install_local_package` uploads your local package and installs it in the venv with its dependencies.
-5. `deploy_supervisor_service` writes a supervisord entry for the app and reloads supervisord, so the app runs as a service that restarts on failure and survives reboots. `supervisor_restart` then restarts it, so it runs the new code even when its configuration did not change.
+1. `Server` describes the server: its address, user, and either a `Password` or a `Key`. Nothing connects yet; the value is only validated. The library opens one SSH connection per `Server` the first time a function needs it, and reuses it.
+2. `ensure_uv` puts the [uv](https://docs.astral.sh/uv/) binary in `~/.pyeasydeploy/bin/uv`. It asks GitHub for the latest release and compares it with `uv --version` on the server: when they match, nothing is downloaded. Otherwise your machine downloads the build for the server's processor (`x86_64` or `aarch64`) and uploads it.
+3. `ensure_python` has uv install the Python you ask for in `~/.pyeasydeploy/python/`, upgraded to its latest patch release. The system's Python is never used: a distribution upgrade cannot change or remove the interpreter your app runs on.
+4. `deploy_app` packs your project, uploads it to a new release directory, and runs `uv sync --frozen` there, so the server gets exactly the versions of your `uv.lock`. Then it points `current` at the new release, writes a systemd user service for the app, and restarts it. The two newest releases are kept.
 
-The `venv` object returned by `create_venv` carries its own path, so the service command is built from it and no path is repeated by hand. Run the script again and the server ends up in the same state: see [Reproducibility](reproducibility.md).
+The app runs while the new release installs, and stops only for the restart. Its output goes to the systemd journal, which rotates it on its own: read it with `app_logs`.
 
-The models (`Host`, `Key`, `SupervisorService` and the rest) validate themselves when built, so a relative path or a malformed service name fails on your machine before anything reaches the server. Keep secrets out of the script: read `sudo_password` from the environment, for example `os.environ["SUDO_PASSWORD"]`.
+On the server, everything lives in one folder, and the library refuses to remove anything outside it:
+
+```text
+~/.pyeasydeploy/
+  bin/uv
+  python/                         Pythons installed by uv
+  cache/                          uv's cache
+  apps/web/
+    releases/20261108T183000Z/    the code and its .venv
+    current -> releases/20261108T183000Z
+    pyeasydeploy-web.service      the systemd user service
+```
 
 ## Requirements
 
-- **Your machine:** Windows, macOS or Linux, with SSH access to the server.
-- **The server:** Linux with SSH and a `python3` in `/usr/bin`. Tested on Arch, Debian and Ubuntu.
-- **Services:** supervisord is installed and managed on Arch and on Debian-based distributions (Debian, Ubuntu), detected from `/etc/os-release`. Managing services needs sudo on the server.
+- **Your machine:** Windows, macOS or Linux, with SSH access to the server and to GitHub.
+- **Your project:** a `pyproject.toml` and a `uv.lock` (run `uv lock` in it).
+- **The server:** Linux on `x86_64` or `aarch64`, with SSH, systemd and access to GitHub and PyPI. No Python, no packages, no sudo.
+- **Once, as root on the server:** `loginctl enable-linger deploy` (with your user), so the user's services start when the server boots and keep running after you log out. `deploy_app` checks it first and tells you the command if it is missing.
 
 ## Where to go next
 

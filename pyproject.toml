@@ -8,10 +8,10 @@ dynamic = ["version"]
 authors = [
     {name = "Beltrán Offerrall"}
 ]
-description = "Deploy Python apps to Linux servers over SSH, with plain functions on top of Fabric."
+description = "Deploy Python apps to Linux servers over SSH: uv, Python and your app arrive with the deploy, without sudo."
 readme = "README.md"
 requires-python = ">=3.11"
-keywords = ["deployment", "devops", "automation", "ssh", "fabric", "supervisor"]
+keywords = ["deployment", "devops", "automation", "ssh", "fabric", "uv", "systemd"]
 license = "MIT"
 
 classifiers = [
@@ -31,7 +31,7 @@ classifiers = [
 
 dependencies = [
     "fabric>=3.0.0",
-    "pytypehint==1.2.1",
+    "pytypehint==1.2.3",
 ]
 
 [project.urls]
